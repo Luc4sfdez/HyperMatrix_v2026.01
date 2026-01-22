@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import { Card, CardHeader, CardTitle, CardContent, CardFooter } from '../components/Card'
 import { Button } from '../components/Button'
 
@@ -34,6 +34,64 @@ function StepIndicator({ steps, currentStep }) {
             }`} />
           )}
         </div>
+      ))}
+    </div>
+  )
+}
+
+// Selector de grupos de hermanos detectados
+function SiblingGroupSelector({ groups, loading, onSelect, selectedGroup }) {
+  if (loading) {
+    return (
+      <div className="text-center py-4">
+        <div className="inline-block animate-spin rounded-full h-6 w-6 border-b-2 border-[var(--color-primary)]"></div>
+        <p className="text-sm text-[var(--color-fg-secondary)] mt-2">Cargando grupos detectados...</p>
+      </div>
+    )
+  }
+
+  if (!groups || groups.length === 0) {
+    return (
+      <p className="text-sm text-[var(--color-fg-tertiary)] text-center py-4">
+        No hay grupos de hermanos detectados. Ejecuta un escaneo primero.
+      </p>
+    )
+  }
+
+  return (
+    <div className="space-y-2 max-h-64 overflow-y-auto">
+      {groups.map((group, idx) => (
+        <button
+          key={idx}
+          onClick={() => onSelect(group)}
+          className={`w-full text-left p-3 rounded-lg border transition-all ${
+            selectedGroup?.filename === group.filename
+              ? 'border-[var(--color-primary)] bg-[var(--color-primary)] bg-opacity-10'
+              : 'border-[var(--color-border)] hover:border-[var(--color-primary)] hover:bg-[var(--color-bg-secondary)]'
+          }`}
+        >
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className="text-lg">📄</span>
+              <div>
+                <span className="font-medium text-[var(--color-fg-primary)]">{group.filename}</span>
+                <span className="text-xs text-[var(--color-fg-tertiary)] ml-2">
+                  ({group.file_count} versiones)
+                </span>
+              </div>
+            </div>
+            {group.average_affinity >= 0.8 && (
+              <span className="px-2 py-0.5 bg-[var(--color-success)] bg-opacity-20 text-[var(--color-success)] text-xs rounded">
+                Alta similitud
+              </span>
+            )}
+          </div>
+          {group.proposed_master && (
+            <p className="text-xs text-[var(--color-fg-tertiary)] mt-1 truncate">
+              Maestro: {group.proposed_master.split('/').pop()}
+            </p>
+          )}
+        </button>
       ))}
     </div>
   )
@@ -136,7 +194,7 @@ function ConflictResolver({ conflict, resolution, onResolve }) {
   )
 }
 
-export default function MergeWizard({ hypermatrixUrl }) {
+export default function MergeWizard({ hypermatrixUrl, navContext }) {
   const [step, setStep] = useState(1)
   const [files, setFiles] = useState([])
   const [baseFile, setBaseFile] = useState('')
@@ -147,6 +205,64 @@ export default function MergeWizard({ hypermatrixUrl }) {
   const [outputPath, setOutputPath] = useState('')
   const [executing, setExecuting] = useState(false)
   const [result, setResult] = useState(null)
+
+  // Sibling groups state
+  const [siblingGroups, setSiblingGroups] = useState([])
+  const [loadingSiblings, setLoadingSiblings] = useState(true)
+  const [selectedGroup, setSelectedGroup] = useState(null)
+  const [currentScanId, setCurrentScanId] = useState(null)
+
+  // Load sibling groups on mount
+  useEffect(() => {
+    const loadSiblingGroups = async () => {
+      setLoadingSiblings(true)
+      try {
+        // First get the latest scan
+        const scanRes = await fetch(`${hypermatrixUrl}/api/scan/list`)
+        const scanData = await scanRes.json()
+        const completedScan = scanData.scans?.find(s => s.status === 'completed')
+
+        if (completedScan) {
+          setCurrentScanId(completedScan.scan_id)
+
+          // Load sibling groups (only those with 2+ files, sorted by file count)
+          const siblingsRes = await fetch(
+            `${hypermatrixUrl}/api/consolidation/siblings/${completedScan.scan_id}?limit=50&sort_by=files`
+          )
+          if (siblingsRes.ok) {
+            const siblingsData = await siblingsRes.json()
+            // Filter to only show groups with 2+ files
+            const validGroups = (siblingsData.groups || []).filter(g => g.file_count >= 2)
+            setSiblingGroups(validGroups)
+          }
+        }
+      } catch (err) {
+        console.error('Error loading sibling groups:', err)
+      } finally {
+        setLoadingSiblings(false)
+      }
+    }
+
+    loadSiblingGroups()
+
+    // If coming from Results page with pre-selected files
+    if (navContext?.files) {
+      setFiles(navContext.files)
+      if (navContext.masterProposal) {
+        setBaseFile(navContext.masterProposal)
+      }
+    }
+  }, [hypermatrixUrl, navContext])
+
+  // Select a sibling group
+  const selectSiblingGroup = (group) => {
+    setSelectedGroup(group)
+    const filePaths = group.files?.map(f => f.filepath) || []
+    setFiles(filePaths)
+    if (group.proposed_master) {
+      setBaseFile(group.proposed_master)
+    }
+  }
 
   // Añadir archivo
   const addFile = (file) => {
@@ -316,7 +432,33 @@ export default function MergeWizard({ hypermatrixUrl }) {
           <CardHeader>
             <CardTitle>📁 Selecciona los archivos a fusionar</CardTitle>
           </CardHeader>
-          <CardContent>
+          <CardContent className="space-y-6">
+            {/* Grupos de hermanos detectados */}
+            <div>
+              <h4 className="text-sm font-medium text-[var(--color-fg-primary)] mb-3 flex items-center gap-2">
+                <span>🔍</span> Grupos de hermanos detectados
+                {siblingGroups.length > 0 && (
+                  <span className="text-xs px-2 py-0.5 bg-[var(--color-primary)] bg-opacity-20 text-[var(--color-primary)] rounded-full">
+                    {siblingGroups.length} disponibles
+                  </span>
+                )}
+              </h4>
+              <SiblingGroupSelector
+                groups={siblingGroups}
+                loading={loadingSiblings}
+                onSelect={selectSiblingGroup}
+                selectedGroup={selectedGroup}
+              />
+            </div>
+
+            {/* Separador */}
+            <div className="flex items-center gap-4">
+              <div className="flex-1 h-px bg-[var(--color-border)]"></div>
+              <span className="text-xs text-[var(--color-fg-tertiary)]">o añade manualmente</span>
+              <div className="flex-1 h-px bg-[var(--color-border)]"></div>
+            </div>
+
+            {/* Lista manual */}
             <FileList files={files} onAdd={addFile} onRemove={removeFile} />
 
             {files.length >= 2 && (
