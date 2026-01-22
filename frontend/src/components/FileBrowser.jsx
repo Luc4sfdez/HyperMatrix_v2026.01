@@ -35,7 +35,7 @@ export default function FileBrowser({
   title = 'Seleccionar Archivo',
   hypermatrixUrl,
 }) {
-  const [currentPath, setCurrentPath] = useState(initialPath || 'C:/')
+  const [currentPath, setCurrentPath] = useState(initialPath || '/projects')
   const [items, setItems] = useState([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)

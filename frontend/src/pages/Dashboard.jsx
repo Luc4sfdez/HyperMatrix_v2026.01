@@ -521,7 +521,7 @@ export default function Dashboard({ hypermatrixUrl, onNavigate }) {
           if (!projectName) setProjectName(name)
           addRecentProject(hypermatrixUrl, path, name)
         }}
-        initialPath={projectPath || 'C:/'}
+        initialPath={projectPath || '/projects'}
         mode="directory"
         title="Seleccionar Directorio del Proyecto"
         hypermatrixUrl={hypermatrixUrl}

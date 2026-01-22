@@ -8,7 +8,7 @@ function FileSelector({ hypermatrixUrl, value, onChange, placeholder, label }) {
   const [activeTab, setActiveTab] = useState('db')  // 'db' o 'browse'
   const [dbFiles, setDbFiles] = useState([])
   const [loadingDb, setLoadingDb] = useState(false)
-  const [browsePath, setBrowsePath] = useState('C:/')
+  const [browsePath, setBrowsePath] = useState('/projects')
   const [browseItems, setBrowseItems] = useState([])
   const [loadingBrowse, setLoadingBrowse] = useState(false)
   const [searchFilter, setSearchFilter] = useState('')
@@ -77,7 +77,7 @@ function FileSelector({ hypermatrixUrl, value, onChange, placeholder, label }) {
     const parts = browsePath.replace(/\\/g, '/').split('/').filter(Boolean)
     if (parts.length > 1) {
       parts.pop()
-      const newPath = parts.join('/') || 'C:/'
+      const newPath = '/' + parts.join('/') || '/'
       loadDirectory(newPath)
     }
   }
