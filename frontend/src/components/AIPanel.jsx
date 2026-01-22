@@ -276,9 +276,13 @@ export default function AIPanel({
 
   // Manejar Enter en textarea
   const handleKeyDown = (e) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
+    // Enter sin Shift envía el mensaje
+    if ((e.key === 'Enter' || e.keyCode === 13) && !e.shiftKey) {
       e.preventDefault()
-      sendChatMessage()
+      e.stopPropagation()
+      if (inputText.trim() && !isLoading) {
+        sendChatMessage()
+      }
     }
   }
 
