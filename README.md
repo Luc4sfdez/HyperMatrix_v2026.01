@@ -37,7 +37,7 @@ docker-compose logs -f
 |----------|-----|-------------|
 | Web UI | http://localhost:26020 | Dashboard principal |
 | API Docs | http://localhost:26020/api/docs | Swagger UI |
-| Ollama | http://localhost:11434 | API de LLM local |
+| Ollama | http://localhost:11435 | API de LLM local |
 
 ## Configuración
 
