@@ -1,8 +1,6 @@
 # HyperMatrix v2026.01 + Ollama Stack
 # Docker Compose for local AI-powered code analysis
 
-version: '3.8'
-
 services:
   # ===========================================================================
   # HyperMatrix - Code Analysis Dashboard
@@ -21,11 +19,8 @@ services:
       - OLLAMA_MODEL=${OLLAMA_MODEL:-qwen2.5-coder:7b}
       - DATA_DIR=/app/data
     volumes:
-      # Persistent data volume for database and projects
       - hypermatrix_data:/app/data
-      # Mount local projects for analysis (optional)
       - ${PROJECTS_PATH:-./projects}:/projects:ro
-      # Logs
       - hypermatrix_logs:/app/logs
     depends_on:
       ollama:
@@ -47,13 +42,12 @@ services:
     image: ollama/ollama:latest
     container_name: hypermatrix-ollama
     ports:
-      - "11434:11434"
+      - "11435:11434"
     environment:
       - OLLAMA_HOST=0.0.0.0
       - OLLAMA_KEEP_ALIVE=24h
       - OLLAMA_NUM_PARALLEL=2
     volumes:
-      # Persistent volume for downloaded models
       - ollama_models:/root/.ollama
     networks:
       - hypermatrix-network
@@ -64,17 +58,9 @@ services:
       timeout: 10s
       retries: 5
       start_period: 30s
-    # Uncomment for GPU support (NVIDIA)
-    # deploy:
-    #   resources:
-    #     reservations:
-    #       devices:
-    #         - driver: nvidia
-    #           count: 1
-    #           capabilities: [gpu]
 
   # ===========================================================================
-  # Ollama Model Initializer (runs once to download model)
+  # Ollama Model Initializer (downloads model on first run)
   # ===========================================================================
   ollama-init:
     image: curlimages/curl:latest
@@ -86,28 +72,17 @@ services:
       - hypermatrix-network
     entrypoint: >
       sh -c "
-        echo 'Waiting for Ollama to be ready...' &&
-        sleep 5 &&
-        echo 'Pulling model: ${OLLAMA_MODEL:-qwen2.5-coder:7b}...' &&
+        echo 'Downloading model: ${OLLAMA_MODEL:-qwen2.5-coder:7b}...' &&
         curl -X POST http://ollama:11434/api/pull -d '{\"name\": \"${OLLAMA_MODEL:-qwen2.5-coder:7b}\"}' &&
-        echo 'Model downloaded successfully!'
+        echo 'Model ready!'
       "
     restart: "no"
 
-# =============================================================================
-# Networks
-# =============================================================================
 networks:
   hypermatrix-network:
     driver: bridge
 
-# =============================================================================
-# Volumes
-# =============================================================================
 volumes:
   hypermatrix_data:
-    name: hypermatrix_data
   hypermatrix_logs:
-    name: hypermatrix_logs
   ollama_models:
-    name: ollama_models
