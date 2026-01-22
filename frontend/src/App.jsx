@@ -4,6 +4,8 @@ import { Sidebar, SidebarNav, SidebarNavGroup, SidebarNavItem } from './componen
 import { ThemeToggle } from './components/ThemeToggle'
 import { SearchBar } from './components/SearchBar'
 import Breadcrumbs, { generateBreadcrumbs } from './components/Breadcrumbs'
+import AIPanel from './components/AIPanel'
+import { AIProvider, useAI } from './contexts/AIContext'
 import Dashboard from './pages/Dashboard'
 import ScanResults from './pages/ScanResults'
 import Analysis from './pages/Analysis'
@@ -23,13 +25,17 @@ import Settings from './pages/Settings'
 import './styles/variables.css'
 import './styles/globals.css'
 
-export default function App() {
+// Componente interno que usa el contexto de IA
+function AppContent() {
   const [currentPage, setCurrentPage] = useState('dashboard')
   const [navContext, setNavContext] = useState({}) // Contexto de navegación (datos entre páginas)
   const [navHistory, setNavHistory] = useState([]) // Historial para breadcrumbs
   const [hypermatrixUrl, setHypermatrixUrl] = useState('http://127.0.0.1:26020')
   const [isConnected, setIsConnected] = useState(false)
   const [sidebarOpen, setSidebarOpen] = useState(true)
+
+  // Hook del panel de IA
+  const ai = useAI()
 
   // Navegación con contexto
   const handleNavigate = useCallback((page, data = {}) => {
@@ -58,6 +64,7 @@ export default function App() {
     hypermatrixUrl,
     onNavigate: handleNavigate,
     navContext,
+    ai, // Contexto de IA para todas las páginas
   }
 
   // Renderizar solo la página actual (evita crear todas las páginas en cada render)
@@ -249,6 +256,17 @@ export default function App() {
             hypermatrixUrl={hypermatrixUrl}
             onNavigate={handleNavigate}
           />
+          <button
+            onClick={ai.toggle}
+            className={`p-2 rounded-md transition-colors ${
+              ai.isOpen
+                ? 'bg-[var(--color-primary)] text-white'
+                : 'hover:bg-[var(--color-bg-secondary)] text-[var(--color-fg-secondary)]'
+            }`}
+            title="Asistente IA (Ollama)"
+          >
+            🤖
+          </button>
           <ThemeToggle />
         </div>
       }
@@ -265,6 +283,26 @@ export default function App() {
         )}
         {renderCurrentPage()}
       </div>
+
+      {/* Panel de IA colapsable a la derecha */}
+      <AIPanel
+        hypermatrixUrl={hypermatrixUrl}
+        isOpen={ai.isOpen}
+        onToggle={ai.toggle}
+        contextCode={ai.contextCode}
+        contextFile={ai.contextFile}
+        contextLanguage={ai.contextLanguage}
+        onAIResult={ai.handleAIResult}
+      />
     </Layout>
+  )
+}
+
+// Componente principal con Provider
+export default function App() {
+  return (
+    <AIProvider>
+      <AppContent />
+    </AIProvider>
   )
 }

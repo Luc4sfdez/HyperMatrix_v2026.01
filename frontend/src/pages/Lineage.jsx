@@ -153,7 +153,7 @@ function DetailPanel({ data, onClose }) {
   )
 }
 
-export default function Lineage({ hypermatrixUrl }) {
+export default function Lineage({ hypermatrixUrl, ai }) {
   const [scanId, setScanId] = useState('')
   const [availableScans, setAvailableScans] = useState([])
   const [selectedFile, setSelectedFile] = useState('')
@@ -163,6 +163,39 @@ export default function Lineage({ hypermatrixUrl }) {
   const [graphData, setGraphData] = useState(null)
   const [detailData, setDetailData] = useState(null)
   const [viewMode, setViewMode] = useState('tree') // 'tree' or 'radial'
+
+  // Analizar linaje con IA
+  const analyzeWithAI = useCallback(() => {
+    if (!ai || !graphData) return
+
+    const analysisText = `# Análisis de Dependencias
+
+## Archivo Central
+${graphData.filepath}
+
+## Métricas
+- **Acoplamiento**: ${graphData.coupling_score?.toFixed(2) || 'N/A'}
+- **Profundidad desde raíz**: ${graphData.depth_from_root || 'N/A'}
+
+## Importa (${graphData.imports?.length || 0} dependencias)
+${graphData.imports?.map(i => `- ${i}`).join('\n') || 'Ninguna'}
+
+## Importado por (${graphData.imported_by?.length || 0} archivos)
+${graphData.imported_by?.map(i => `- ${i}`).join('\n') || 'Ninguno'}
+
+## Dependencias Externas
+${graphData.external_dependencies?.map(e => `- ${e}`).join('\n') || 'Ninguna'}
+
+${graphData.circular_dependencies?.length > 0 ? `## ⚠️ Dependencias Circulares\n${graphData.circular_dependencies.map(c => `- ${c}`).join('\n')}` : ''}
+
+Por favor, analiza este grafo de dependencias y recomienda:
+1. Si hay problemas de acoplamiento alto
+2. Cómo mejorar la arquitectura
+3. Si las dependencias circulares (si existen) son problemáticas
+4. Sugerencias de refactorización`
+
+    ai.openForReview(analysisText, `Linaje: ${graphData.filepath.split(/[/\\]/).pop()}`)
+  }, [ai, graphData])
 
   // Cargar scans disponibles
   useEffect(() => {
@@ -331,6 +364,11 @@ export default function Lineage({ hypermatrixUrl }) {
 
             {graphData && (
               <div className="flex gap-2 ml-auto">
+                {ai && (
+                  <Button variant="secondary" onClick={analyzeWithAI}>
+                    🤖 Analizar con IA
+                  </Button>
+                )}
                 <button
                   onClick={() => setViewMode('tree')}
                   className={`px-3 py-2 rounded text-sm transition-colors ${

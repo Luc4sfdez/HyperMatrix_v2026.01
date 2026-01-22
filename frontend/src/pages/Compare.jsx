@@ -296,7 +296,7 @@ function CodePanel({ title, code, lines, filepath, onScroll, scrollRef }) {
   )
 }
 
-export default function Compare({ hypermatrixUrl }) {
+export default function Compare({ hypermatrixUrl, ai }) {
   const [file1, setFile1] = useState('')
   const [file2, setFile2] = useState('')
   const [loading, setLoading] = useState(false)
@@ -305,6 +305,39 @@ export default function Compare({ hypermatrixUrl }) {
   const [comparison, setComparison] = useState(null)
   const [content1, setContent1] = useState(null)
   const [content2, setContent2] = useState(null)
+
+  // Analizar comparación con IA
+  const analyzeWithAI = useCallback(() => {
+    if (!ai || !comparison) return
+
+    const analysisText = `# Análisis de Comparación de Archivos
+
+## Archivo 1: ${comparison.file1}
+- Líneas: ${comparison.file1_lines}
+
+## Archivo 2: ${comparison.file2}
+- Líneas: ${comparison.file2_lines}
+
+## Métricas de Similitud
+- **Overall**: ${(comparison.affinity.overall * 100).toFixed(1)}%
+- **Contenido**: ${(comparison.affinity.content * 100).toFixed(1)}%
+- **Estructura**: ${(comparison.affinity.structure * 100).toFixed(1)}%
+- **DNA**: ${(comparison.affinity.dna * 100).toFixed(1)}%
+- **Nivel**: ${comparison.affinity.level}
+- **Hash Match**: ${comparison.affinity.hash_match ? 'Sí (idénticos)' : 'No'}
+
+${content1 ? `## Código Archivo 1:\n\`\`\`\n${content1.slice(0, 2000)}${content1.length > 2000 ? '\n... (truncado)' : ''}\n\`\`\`` : ''}
+
+${content2 ? `## Código Archivo 2:\n\`\`\`\n${content2.slice(0, 2000)}${content2.length > 2000 ? '\n... (truncado)' : ''}\n\`\`\`` : ''}
+
+Por favor, analiza estas diferencias y recomienda:
+1. Si estos archivos deberían unificarse
+2. Qué versión parece más completa o actualizada
+3. Posibles conflictos al hacer merge
+4. Sugerencias de consolidación`
+
+    ai.openForReview(analysisText, `Comparación: ${comparison.file1.split(/[/\\]/).pop()} vs ${comparison.file2.split(/[/\\]/).pop()}`)
+  }, [ai, comparison, content1, content2])
 
   // Comparar archivos
   const compare = useCallback(async () => {
@@ -475,14 +508,19 @@ export default function Compare({ hypermatrixUrl }) {
                 </div>
               </div>
 
-              {/* Botón proponer merge */}
-              {comparison.affinity.overall >= 0.3 && !comparison.affinity.hash_match && (
-                <div className="mt-4 pt-4 border-t border-[var(--color-border)]">
+              {/* Botones de acción */}
+              <div className="mt-4 pt-4 border-t border-[var(--color-border)] flex gap-2">
+                {comparison.affinity.overall >= 0.3 && !comparison.affinity.hash_match && (
                   <Button variant="secondary" onClick={proposeMerge}>
                     🔗 Proponer Merge
                   </Button>
-                </div>
-              )}
+                )}
+                {ai && (
+                  <Button variant="primary" onClick={analyzeWithAI}>
+                    🤖 Analizar con IA
+                  </Button>
+                )}
+              </div>
             </CardContent>
           </Card>
 

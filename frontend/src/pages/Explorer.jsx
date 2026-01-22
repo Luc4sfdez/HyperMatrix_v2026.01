@@ -12,7 +12,7 @@ const SEARCH_TYPES = [
 ]
 
 // Componente de detalle expandible
-function DetailPanel({ item, type, onClose }) {
+function DetailPanel({ item, type, onClose, onAnalyzeWithAI }) {
   if (!item) return null
 
   const renderDetail = () => {
@@ -200,12 +200,23 @@ function DetailPanel({ item, type, onClose }) {
       >
         <div className="flex items-center justify-between p-4 border-b border-[var(--color-border)]">
           <h3 className="font-semibold text-[var(--color-fg-primary)]">Detalles</h3>
-          <button
-            onClick={onClose}
-            className="p-1 hover:bg-[var(--color-bg-secondary)] rounded"
-          >
-            ✕
-          </button>
+          <div className="flex items-center gap-2">
+            {onAnalyzeWithAI && (
+              <button
+                onClick={() => onAnalyzeWithAI(item, type)}
+                className="px-3 py-1 text-sm bg-[var(--color-primary)] text-white rounded hover:bg-[var(--color-primary-hover)] transition-colors"
+                title="Analizar con IA"
+              >
+                🤖 Analizar con IA
+              </button>
+            )}
+            <button
+              onClick={onClose}
+              className="p-1 hover:bg-[var(--color-bg-secondary)] rounded"
+            >
+              ✕
+            </button>
+          </div>
         </div>
         <div className="p-4">
           {renderDetail()}
@@ -262,7 +273,7 @@ function ResultRow({ item, type, onClick }) {
   )
 }
 
-export default function Explorer({ hypermatrixUrl }) {
+export default function Explorer({ hypermatrixUrl, ai }) {
   const [searchType, setSearchType] = useState('all')
   const [query, setQuery] = useState('')
   const [results, setResults] = useState(null)
@@ -273,6 +284,63 @@ export default function Explorer({ hypermatrixUrl }) {
   const [pagination, setPagination] = useState({ offset: 0, limit: 50 })
   const [stats, setStats] = useState(null)
   const [loadingStats, setLoadingStats] = useState(true)
+
+  // Función para analizar con IA
+  const handleAnalyzeWithAI = useCallback((item, type) => {
+    if (!ai) return
+
+    // Construir información del elemento para la IA
+    let codeInfo = ''
+    let language = 'python'
+
+    switch (type) {
+      case 'functions':
+        codeInfo = `# Función: ${item.name}\n`
+        codeInfo += `# Archivo: ${item.filepath}:${item.lineno}\n`
+        if (item.is_async) codeInfo += `# Tipo: async function\n`
+        if (item.args?.length) codeInfo += `# Argumentos: ${item.args.join(', ')}\n`
+        if (item.returns) codeInfo += `# Retorna: ${item.returns}\n`
+        if (item.docstring) codeInfo += `# Docstring: ${item.docstring}\n`
+        codeInfo += `\n${item.is_async ? 'async ' : ''}def ${item.name}(${item.args?.join(', ') || ''}):`
+        if (item.returns) codeInfo += ` -> ${item.returns}`
+        codeInfo += `\n    ${item.docstring ? '"""' + item.docstring + '"""' : 'pass'}`
+        break
+
+      case 'classes':
+        codeInfo = `# Clase: ${item.name}\n`
+        codeInfo += `# Archivo: ${item.filepath}:${item.lineno}\n`
+        if (item.bases?.length) codeInfo += `# Hereda de: ${item.bases.join(', ')}\n`
+        if (item.methods?.length) codeInfo += `# Métodos: ${item.methods.join(', ')}\n`
+        if (item.docstring) codeInfo += `# Docstring: ${item.docstring}\n`
+        codeInfo += `\nclass ${item.name}${item.bases?.length ? '(' + item.bases.join(', ') + ')' : ''}:\n`
+        codeInfo += `    ${item.docstring ? '"""' + item.docstring + '"""' : 'pass'}`
+        break
+
+      case 'variables':
+        codeInfo = `# Variable: ${item.name}\n`
+        codeInfo += `# Archivo: ${item.filepath}:${item.lineno}\n`
+        if (item.type_annotation) codeInfo += `# Tipo: ${item.type_annotation}\n`
+        if (item.scope) codeInfo += `# Scope: ${item.scope}\n`
+        codeInfo += `\n${item.name}${item.type_annotation ? ': ' + item.type_annotation : ''} = ...`
+        break
+
+      case 'imports':
+        codeInfo = `# Import: ${item.module}\n`
+        codeInfo += `# Archivo: ${item.filepath}:${item.lineno}\n`
+        if (item.is_from_import) {
+          codeInfo += `\nfrom ${item.module} import ${item.names?.join(', ') || '*'}`
+        } else {
+          codeInfo += `\nimport ${item.module}`
+        }
+        break
+
+      default:
+        codeInfo = JSON.stringify(item, null, 2)
+    }
+
+    // Abrir panel de IA con el código
+    ai.openWithCode(codeInfo, `${item.name || item.module} (${item.filepath})`, language)
+  }, [ai])
 
   // Cargar estadísticas al montar
   useEffect(() => {
@@ -659,7 +727,12 @@ export default function Explorer({ hypermatrixUrl }) {
 
       {/* Panel de detalle */}
       {selectedItem && (
-        <DetailPanel item={selectedItem} type={selectedType} onClose={closeDetail} />
+        <DetailPanel
+          item={selectedItem}
+          type={selectedType}
+          onClose={closeDetail}
+          onAnalyzeWithAI={ai ? handleAnalyzeWithAI : null}
+        />
       )}
     </div>
   )
