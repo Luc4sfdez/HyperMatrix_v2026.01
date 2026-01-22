@@ -1,0 +1,461 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HyperMatrix - Code Analysis</title>
+    <link rel="stylesheet" href="/static/css/main.css">
+</head>
+<body>
+    <div id="app">
+        <!-- Title Bar -->
+        <header class="titlebar">
+            <div class="titlebar-brand">
+                <div class="titlebar-icon"></div>
+                <div class="titlebar-title">HyperMatrix <span>- Code Analysis & Consolidation</span></div>
+            </div>
+            <div class="titlebar-status">
+                <span class="status-indicator" id="status-indicator"></span>
+                <span id="status-text">Ready</span>
+            </div>
+        </header>
+
+        <!-- Activity Bar -->
+        <nav class="activitybar">
+            <div class="activity-item active" data-view="scan" title="Scan">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="11" cy="11" r="8"></circle>
+                    <path d="M21 21l-4.35-4.35"></path>
+                </svg>
+            </div>
+            <div class="activity-item" data-view="results" title="Results">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                    <polyline points="14 2 14 8 20 8"></polyline>
+                    <line x1="16" y1="13" x2="8" y2="13"></line>
+                    <line x1="16" y1="17" x2="8" y2="17"></line>
+                </svg>
+                <span class="activity-badge hidden" id="results-badge">0</span>
+            </div>
+            <div class="activity-item" data-view="compare" title="Compare">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="18" y1="20" x2="18" y2="10"></line>
+                    <line x1="12" y1="20" x2="12" y2="4"></line>
+                    <line x1="6" y1="20" x2="6" y2="14"></line>
+                </svg>
+            </div>
+            <div class="activity-item" data-view="rules" title="Settings">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="3"></circle>
+                    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+                </svg>
+            </div>
+            <div class="activity-spacer"></div>
+            <div class="activity-item" data-action="api-docs" title="API Docs">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path>
+                    <line x1="12" y1="17" x2="12.01" y2="17"></line>
+                </svg>
+            </div>
+        </nav>
+
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <span id="sidebar-title">Explorer</span>
+            </div>
+            <div class="sidebar-content">
+                <!-- Scan Sidebar -->
+                <div id="sidebar-scan" class="sidebar-panel">
+                    <div class="sidebar-section">
+                        <div class="sidebar-section-header">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <polyline points="6 9 12 15 18 9"></polyline>
+                            </svg>
+                            Recent Scans
+                        </div>
+                        <div class="sidebar-section-items" id="recent-scans">
+                            <div class="sidebar-item text-muted" style="padding-left: 28px; font-size: 11px;">
+                                No recent scans
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Results Sidebar -->
+                <div id="sidebar-results" class="sidebar-panel hidden">
+                    <div class="sidebar-section">
+                        <div class="sidebar-section-header">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <polyline points="6 9 12 15 18 9"></polyline>
+                            </svg>
+                            Sibling Groups
+                        </div>
+                        <div class="sidebar-section-items" id="sidebar-groups">
+                            <div class="sidebar-item text-muted" style="padding-left: 28px; font-size: 11px;">
+                                Run a scan first
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Rules Sidebar -->
+                <div id="sidebar-rules" class="sidebar-panel hidden">
+                    <div class="sidebar-section">
+                        <div class="sidebar-section-header">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <polyline points="6 9 12 15 18 9"></polyline>
+                            </svg>
+                            Presets
+                        </div>
+                        <div class="sidebar-section-items">
+                            <div class="sidebar-item" data-preset="conservative">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+                                </svg>
+                                <span class="sidebar-item-text">Conservative</span>
+                            </div>
+                            <div class="sidebar-item" data-preset="aggressive">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+                                </svg>
+                                <span class="sidebar-item-text">Aggressive</span>
+                            </div>
+                            <div class="sidebar-item" data-preset="src-priority">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
+                                </svg>
+                                <span class="sidebar-item-text">Prioritize src/</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Editor Area -->
+        <main class="editor-area">
+            <!-- Tabs -->
+            <div class="editor-tabs">
+                <button class="editor-tab active" data-tab="scan">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="11" cy="11" r="8"></circle>
+                        <path d="M21 21l-4.35-4.35"></path>
+                    </svg>
+                    New Scan
+                </button>
+            </div>
+
+            <!-- Content -->
+            <div class="editor-content">
+                <!-- Scan View -->
+                <section id="view-scan" class="view active">
+                    <div class="card">
+                        <div class="card-header">
+                            <span class="card-title">Start New Scan</span>
+                        </div>
+                        <div class="card-body">
+                            <form id="scan-form">
+                                <div class="form-group">
+                                    <label class="form-label">Path to analyze</label>
+                                    <input type="text" id="scan-path" class="form-input" placeholder="E:\MyProject" required>
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label">Project name</label>
+                                    <input type="text" id="project-name" class="form-input" placeholder="my-project">
+                                </div>
+                                <div class="form-row">
+                                    <label class="checkbox-wrapper">
+                                        <input type="checkbox" id="include-archives" checked>
+                                        Include archives (ZIP, TAR)
+                                    </label>
+                                    <label class="checkbox-wrapper">
+                                        <input type="checkbox" id="detect-duplicates" checked>
+                                        Detect duplicates
+                                    </label>
+                                    <label class="checkbox-wrapper">
+                                        <input type="checkbox" id="calc-similarities" checked>
+                                        Calculate similarities
+                                    </label>
+                                </div>
+                            </form>
+                        </div>
+                        <div class="card-footer">
+                            <button type="submit" form="scan-form" class="btn btn-primary">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <polygon points="5 3 19 12 5 21 5 3"></polygon>
+                                </svg>
+                                Start Scan
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Progress Card -->
+                    <div id="scan-progress" class="card hidden">
+                        <div class="card-header">
+                            <span class="card-title">Scan Progress</span>
+                            <span class="text-muted" id="scan-id-display"></span>
+                        </div>
+                        <div class="card-body">
+                            <div class="progress-container">
+                                <div class="progress-header">
+                                    <span class="progress-label" id="phase-name">Initializing...</span>
+                                    <span class="progress-value" id="phase-files">0 / 0 files</span>
+                                </div>
+                                <div class="progress">
+                                    <div class="progress-bar" id="progress-fill" style="width: 0%"></div>
+                                </div>
+                                <div class="progress-detail" id="current-file">-</div>
+                            </div>
+                            <div id="scan-errors" class="alert alert-error hidden"></div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Results View -->
+                <section id="view-results" class="view">
+                    <!-- Stats -->
+                    <div class="stats-grid" id="results-stats">
+                        <div class="stat-card">
+                            <div class="stat-value" id="stat-files">0</div>
+                            <div class="stat-label">Files</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-value" id="stat-functions">0</div>
+                            <div class="stat-label">Functions</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-value" id="stat-classes">0</div>
+                            <div class="stat-label">Classes</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-value" id="stat-siblings">0</div>
+                            <div class="stat-label">Siblings</div>
+                        </div>
+                    </div>
+
+                    <!-- Toolbar -->
+                    <div class="toolbar">
+                        <div class="toolbar-group">
+                            <input type="text" id="filter-search" class="toolbar-input" placeholder="Search files...">
+                            <select id="filter-affinity" class="toolbar-select">
+                                <option value="0">All affinities</option>
+                                <option value="0.9">> 90%</option>
+                                <option value="0.7">70% - 90%</option>
+                                <option value="0.5">50% - 70%</option>
+                            </select>
+                        </div>
+                        <div class="toolbar-group">
+                            <button class="btn btn-secondary btn-sm" id="btn-batch">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <polyline points="9 11 12 14 22 4"></polyline>
+                                    <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path>
+                                </svg>
+                                Batch Actions
+                            </button>
+                            <button class="btn btn-secondary btn-sm" id="btn-export">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                                    <polyline points="7 10 12 15 17 10"></polyline>
+                                    <line x1="12" y1="15" x2="12" y2="3"></line>
+                                </svg>
+                                Export
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Groups List -->
+                    <div id="groups-container" class="groups-list">
+                        <div class="empty-state">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1">
+                                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                                <polyline points="14 2 14 8 20 8"></polyline>
+                            </svg>
+                            <div class="empty-state-title">No scan results</div>
+                            <div class="empty-state-text">Run a scan to see sibling groups and duplicates.</div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Compare View -->
+                <section id="view-compare" class="view">
+                    <div class="card">
+                        <div class="card-header">
+                            <span class="card-title">Compare Files</span>
+                        </div>
+                        <div class="card-body">
+                            <div class="form-row">
+                                <div class="form-group mb-0">
+                                    <label class="form-label">File 1</label>
+                                    <input type="text" id="compare-file1" class="form-input font-code" placeholder="path/to/file1.py">
+                                </div>
+                                <div class="form-group mb-0">
+                                    <label class="form-label">File 2</label>
+                                    <input type="text" id="compare-file2" class="form-input font-code" placeholder="path/to/file2.py">
+                                </div>
+                            </div>
+                        </div>
+                        <div class="card-footer">
+                            <button class="btn btn-primary" id="btn-compare">Compare</button>
+                        </div>
+                    </div>
+
+                    <div id="compare-result" class="hidden">
+                        <div class="compare-score">
+                            <div class="compare-score-value" id="compare-score">0%</div>
+                            <div class="compare-score-label" id="compare-level">Similarity</div>
+                        </div>
+
+                        <div class="card">
+                            <div class="card-header">
+                                <span class="card-title">Breakdown</span>
+                            </div>
+                            <div class="card-body">
+                                <div class="compare-metrics">
+                                    <div class="compare-metric">
+                                        <span class="compare-metric-label">Content</span>
+                                        <div class="compare-metric-bar">
+                                            <div class="compare-metric-fill" id="compare-content" style="width: 0%"></div>
+                                        </div>
+                                        <span class="compare-metric-value" id="compare-content-val">0%</span>
+                                    </div>
+                                    <div class="compare-metric">
+                                        <span class="compare-metric-label">Structure</span>
+                                        <div class="compare-metric-bar">
+                                            <div class="compare-metric-fill" id="compare-structure" style="width: 0%"></div>
+                                        </div>
+                                        <span class="compare-metric-value" id="compare-structure-val">0%</span>
+                                    </div>
+                                    <div class="compare-metric">
+                                        <span class="compare-metric-label">DNA</span>
+                                        <div class="compare-metric-bar">
+                                            <div class="compare-metric-fill" id="compare-dna" style="width: 0%"></div>
+                                        </div>
+                                        <span class="compare-metric-value" id="compare-dna-val">0%</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Rules View -->
+                <section id="view-rules" class="view">
+                    <div class="card">
+                        <div class="card-header">
+                            <span class="card-title">Rules Configuration</span>
+                        </div>
+                        <div class="card-body">
+                            <form id="rules-form">
+                                <div class="form-group">
+                                    <label class="form-label">Minimum affinity threshold</label>
+                                    <div class="form-row" style="align-items: center;">
+                                        <input type="range" id="rule-threshold" class="form-input" min="0" max="1" step="0.05" value="0.3" style="flex: 1;">
+                                        <span id="threshold-value" style="width: 50px; text-align: right;">30%</span>
+                                    </div>
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label">Conflict resolution</label>
+                                    <select id="rule-conflict" class="form-select">
+                                        <option value="keep_largest">Keep largest</option>
+                                        <option value="keep_complex">Keep most complex</option>
+                                        <option value="keep_newest">Keep newest</option>
+                                        <option value="keep_all">Keep all</option>
+                                        <option value="manual">Manual</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label">Prefer paths (one per line)</label>
+                                    <textarea id="rule-prefer-paths" class="form-textarea" rows="3" placeholder="src/*&#10;lib/*&#10;core/*"></textarea>
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label">Never master from (one per line)</label>
+                                    <textarea id="rule-never-master" class="form-textarea" rows="3" placeholder="backup/*&#10;temp/*&#10;old/*"></textarea>
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label">Ignore patterns (one per line)</label>
+                                    <textarea id="rule-ignore" class="form-textarea" rows="3" placeholder="__pycache__/*&#10;*.pyc&#10;node_modules/*"></textarea>
+                                </div>
+                            </form>
+                        </div>
+                        <div class="card-footer">
+                            <button type="button" class="btn btn-secondary" id="btn-reset-rules">Reset</button>
+                            <button type="submit" form="rules-form" class="btn btn-primary">Save Rules</button>
+                        </div>
+                    </div>
+                </section>
+            </div>
+        </main>
+
+        <!-- Status Bar -->
+        <footer class="statusbar">
+            <div class="statusbar-left">
+                <div class="statusbar-item" id="statusbar-scan">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="11" cy="11" r="8"></circle>
+                        <path d="M21 21l-4.35-4.35"></path>
+                    </svg>
+                    <span id="statusbar-scan-text">No active scan</span>
+                </div>
+            </div>
+            <div class="statusbar-right">
+                <div class="statusbar-item">
+                    <span>HyperMatrix v2026</span>
+                </div>
+                <div class="statusbar-item" id="statusbar-api">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"></path>
+                    </svg>
+                    <span>API Connected</span>
+                </div>
+            </div>
+        </footer>
+    </div>
+
+    <!-- Export Modal -->
+    <div id="export-modal" class="modal-overlay hidden">
+        <div class="modal">
+            <div class="modal-header">
+                <span class="modal-title">Export Report</span>
+                <button class="modal-close" data-close="export-modal">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-row" style="gap: 12px;">
+                    <button class="btn btn-secondary btn-lg" data-format="json" style="flex: 1; flex-direction: column; height: 80px;">
+                        <span style="font-size: 24px; font-weight: 600; color: var(--vscode-accent-yellow);">{ }</span>
+                        <span>JSON</span>
+                    </button>
+                    <button class="btn btn-secondary btn-lg" data-format="csv" style="flex: 1; flex-direction: column; height: 80px;">
+                        <span style="font-size: 18px; font-weight: 600; color: var(--vscode-accent-green);">CSV</span>
+                        <span>CSV</span>
+                    </button>
+                    <button class="btn btn-secondary btn-lg" data-format="markdown" style="flex: 1; flex-direction: column; height: 80px;">
+                        <span style="font-size: 18px; font-weight: 600; color: var(--vscode-accent-cyan);">MD</span>
+                        <span>Markdown</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Detail Modal -->
+    <div id="detail-modal" class="modal-overlay hidden">
+        <div class="modal modal-lg">
+            <div class="modal-header">
+                <span class="modal-title" id="detail-filename">-</span>
+                <button class="modal-close" data-close="detail-modal">&times;</button>
+            </div>
+            <div class="modal-body" id="detail-body">
+                <!-- Dynamic content -->
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" data-close="detail-modal">Close</button>
+                <button class="btn btn-primary" id="btn-merge-preview">Preview Merge</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/js/app.js"></script>
+</body>
+</html>

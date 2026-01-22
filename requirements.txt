@@ -1,0 +1,27 @@
+# HyperMatrix v2026 - Dependencies
+
+# Core
+python-dotenv>=1.0.0
+pydantic>=2.0.0
+tqdm>=4.66.0
+
+# API
+fastapi>=0.109.0
+uvicorn>=0.27.0
+httpx>=0.26.0
+aiofiles>=23.0.0
+
+# Testing
+pytest>=8.0.0
+pytest-cov>=4.0.0
+pytest-xdist>=3.0.0
+
+# Development
+black>=24.0.0
+flake8>=7.0.0
+isort>=5.13.0
+mypy>=1.8.0
+
+# Security (CI/CD)
+bandit>=1.7.0
+safety>=2.3.0

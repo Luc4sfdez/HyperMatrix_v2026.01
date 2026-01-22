@@ -1,0 +1,59 @@
+@import './styles/variables.css';
+@import './styles/globals.css';
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Custom styles for HyperMatrix UI */
+.hypermatrix-card-hover {
+  @apply transition-all duration-200 hover:shadow-md hover:border-[#007ACC];
+}
+
+.status-badge {
+  @apply inline-flex items-center px-2 py-1 text-xs font-medium rounded-full;
+}
+
+.status-success {
+  @apply bg-[#27AE60] bg-opacity-20 text-[#27AE60];
+}
+
+.status-warning {
+  @apply bg-[#F39C12] bg-opacity-20 text-[#F39C12];
+}
+
+.status-error {
+  @apply bg-[#E74C3C] bg-opacity-20 text-[#E74C3C];
+}
+
+.status-info {
+  @apply bg-[#3498DB] bg-opacity-20 text-[#3498DB];
+}
+
+.progress-bar {
+  @apply h-2 bg-[#F5F5F5] rounded-full overflow-hidden;
+}
+
+.progress-fill {
+  @apply h-full bg-[#007ACC] transition-all duration-300;
+}
+
+.code-block {
+  @apply bg-[#1E1E1E] text-[#E0E0E0] p-4 rounded-lg overflow-auto font-mono text-sm;
+}
+
+.metric-grid {
+  @apply grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4;
+}
+
+.metric-card {
+  @apply bg-white border border-[#E0E0E0] rounded-lg p-4 text-center hover:shadow-md transition-all;
+}
+
+.metric-value {
+  @apply text-2xl font-bold text-[#007ACC] mt-2;
+}
+
+.metric-label {
+  @apply text-sm text-[#616161] uppercase tracking-wider;
+}

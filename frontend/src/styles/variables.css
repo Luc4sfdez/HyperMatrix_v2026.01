@@ -1,0 +1,86 @@
+/* VS Code Color Palette */
+:root {
+  /* Colores principales (light mode) */
+  --color-primary: #007ACC;
+  --color-primary-light: #0E6BBF;
+  --color-primary-dark: #005A9E;
+  --color-accent: #007ACC;
+  
+  /* Grises - Light Mode */
+  --color-bg-primary: #FFFFFF;
+  --color-bg-secondary: #F5F5F5;
+  --color-bg-tertiary: #EFEFEF;
+  --color-fg-primary: #1E1E1E;
+  --color-fg-secondary: #616161;
+  --color-fg-tertiary: #A0A0A0;
+  --color-border: #E0E0E0;
+  
+  /* Sintaxis - Light */
+  --color-syntax-keyword: #0000FF;
+  --color-syntax-comment: #008000;
+  --color-syntax-string: #A31515;
+  --color-syntax-number: #098658;
+  --color-syntax-function: #0066BC;
+  
+  /* Estados */
+  --color-error: #E74C3C;
+  --color-warning: #F39C12;
+  --color-success: #27AE60;
+  --color-info: #3498DB;
+  
+  /* Tipografía */
+  --font-family-base: -apple-system, BlinkMacOSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+  --font-family-mono: "Consolas", "Monaco", "Courier New", monospace;
+  --font-size-xs: 12px;
+  --font-size-sm: 13px;
+  --font-size-base: 14px;
+  --font-size-lg: 16px;
+  --font-size-xl: 18px;
+  --font-size-2xl: 20px;
+  
+  /* Espaciado */
+  --spacing-xs: 4px;
+  --spacing-sm: 8px;
+  --spacing-md: 12px;
+  --spacing-lg: 16px;
+  --spacing-xl: 24px;
+  --spacing-2xl: 32px;
+  
+  /* Border radius */
+  --radius-sm: 2px;
+  --radius-md: 4px;
+  --radius-lg: 6px;
+  
+  /* Sombras */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
+  --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.1);
+  --shadow-lg: 0 10px 15px rgba(0, 0, 0, 0.1);
+  
+  /* Transiciones */
+  --transition-fast: 150ms ease-in-out;
+  --transition-base: 200ms ease-in-out;
+  --transition-slow: 300ms ease-in-out;
+}
+
+/* Dark Mode (como Dark+ de VS Code) */
+[data-theme="dark"] {
+  --color-bg-primary: #1E1E1E;
+  --color-bg-secondary: #252526;
+  --color-bg-tertiary: #2D2D30;
+  --color-fg-primary: #E0E0E0;
+  --color-fg-secondary: #A0A0A0;
+  --color-fg-tertiary: #616161;
+  --color-border: #3E3E42;
+
+  /* Sintaxis - Dark */
+  --color-syntax-keyword: #569CD6;
+  --color-syntax-comment: #6A9955;
+  --color-syntax-string: #CE9178;
+  --color-syntax-number: #B5CEA8;
+  --color-syntax-function: #DCDCAA;
+}
+
+/* Smooth transitions para theme switching */
+* {
+  transition: background-color var(--transition-base), color var(--transition-base);
+}

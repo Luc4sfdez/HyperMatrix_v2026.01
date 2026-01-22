@@ -1,0 +1,113 @@
+# HyperMatrix v2026.01 + Ollama Stack
+# Docker Compose for local AI-powered code analysis
+
+version: '3.8'
+
+services:
+  # ===========================================================================
+  # HyperMatrix - Code Analysis Dashboard
+  # ===========================================================================
+  hypermatrix:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: hypermatrix
+    ports:
+      - "26020:26020"
+    environment:
+      - HYPERMATRIX_PORT=26020
+      - HYPERMATRIX_HOST=0.0.0.0
+      - OLLAMA_HOST=ollama:11434
+      - OLLAMA_MODEL=${OLLAMA_MODEL:-qwen2.5-coder:7b}
+      - DATA_DIR=/app/data
+    volumes:
+      # Persistent data volume for database and projects
+      - hypermatrix_data:/app/data
+      # Mount local projects for analysis (optional)
+      - ${PROJECTS_PATH:-./projects}:/projects:ro
+      # Logs
+      - hypermatrix_logs:/app/logs
+    depends_on:
+      ollama:
+        condition: service_healthy
+    networks:
+      - hypermatrix-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:26020/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  # ===========================================================================
+  # Ollama - Local LLM Server
+  # ===========================================================================
+  ollama:
+    image: ollama/ollama:latest
+    container_name: hypermatrix-ollama
+    ports:
+      - "11434:11434"
+    environment:
+      - OLLAMA_HOST=0.0.0.0
+      - OLLAMA_KEEP_ALIVE=24h
+      - OLLAMA_NUM_PARALLEL=2
+    volumes:
+      # Persistent volume for downloaded models
+      - ollama_models:/root/.ollama
+    networks:
+      - hypermatrix-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    # Uncomment for GPU support (NVIDIA)
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: 1
+    #           capabilities: [gpu]
+
+  # ===========================================================================
+  # Ollama Model Initializer (runs once to download model)
+  # ===========================================================================
+  ollama-init:
+    image: curlimages/curl:latest
+    container_name: hypermatrix-ollama-init
+    depends_on:
+      ollama:
+        condition: service_healthy
+    networks:
+      - hypermatrix-network
+    entrypoint: >
+      sh -c "
+        echo 'Waiting for Ollama to be ready...' &&
+        sleep 5 &&
+        echo 'Pulling model: ${OLLAMA_MODEL:-qwen2.5-coder:7b}...' &&
+        curl -X POST http://ollama:11434/api/pull -d '{\"name\": \"${OLLAMA_MODEL:-qwen2.5-coder:7b}\"}' &&
+        echo 'Model downloaded successfully!'
+      "
+    restart: "no"
+
+# =============================================================================
+# Networks
+# =============================================================================
+networks:
+  hypermatrix-network:
+    driver: bridge
+
+# =============================================================================
+# Volumes
+# =============================================================================
+volumes:
+  hypermatrix_data:
+    name: hypermatrix_data
+  hypermatrix_logs:
+    name: hypermatrix_logs
+  ollama_models:
+    name: ollama_models
