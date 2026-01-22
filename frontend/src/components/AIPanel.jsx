@@ -98,6 +98,17 @@ function CodeBlock({ code, language, onAnalyze }) {
   )
 }
 
+// Comandos especiales disponibles
+const SPECIAL_COMMANDS = [
+  { cmd: '/proyecto', desc: 'Ver resumen del proyecto actual' },
+  { cmd: '/archivos', desc: 'Buscar archivos (ej: /archivos config.py)' },
+  { cmd: '/hermanos', desc: 'Ver archivos con mismo nombre' },
+  { cmd: '/duplicados', desc: 'Ver grupos de duplicados' },
+  { cmd: '/leer', desc: 'Leer archivo (ej: /leer ruta/archivo.py)' },
+  { cmd: '/comparar', desc: 'Comparar archivos (ej: /comparar a.py b.py)' },
+  { cmd: '/ayuda', desc: 'Ver todos los comandos' }
+]
+
 export default function AIPanel({
   hypermatrixUrl,
   isOpen,
@@ -105,7 +116,8 @@ export default function AIPanel({
   contextCode = null,
   contextFile = null,
   contextLanguage = null,
-  onAIResult = null
+  onAIResult = null,
+  currentScanId = null
 }) {
   const [mode, setMode] = useState(AI_MODES.CHAT)
   const [messages, setMessages] = useState([])
@@ -122,6 +134,8 @@ export default function AIPanel({
   const [savedConversations, setSavedConversations] = useState([])
   const [showHistory, setShowHistory] = useState(false)
   const [autoSave, setAutoSave] = useState(true)
+  const [showCommands, setShowCommands] = useState(false)
+  const [projectContext, setProjectContext] = useState(null)
   const messagesEndRef = useRef(null)
   const textareaRef = useRef(null)
 
@@ -294,6 +308,32 @@ export default function AIPanel({
     scrollToBottom()
   }, [messages])
 
+  // Cargar contexto del proyecto
+  const loadProjectContext = useCallback(async () => {
+    try {
+      const scanId = currentScanId || ''
+      const response = await fetch(`${hypermatrixUrl}/api/ai/context/project${scanId ? `?scan_id=${scanId}` : ''}`)
+      if (response.ok) {
+        const data = await response.json()
+        setProjectContext(data)
+        // Solo añadir mensaje si hay proyecto y no hay mensajes previos
+        if (data.has_project) {
+          setMessages(prev => {
+            if (prev.length === 0) {
+              return [{
+                type: 'system',
+                text: `📂 Proyecto cargado: ${data.project_name} (${data.total_files} archivos, ${data.sibling_groups} grupos de hermanos)`
+              }]
+            }
+            return prev
+          })
+        }
+      }
+    } catch (err) {
+      console.error('Error loading project context:', err)
+    }
+  }, [hypermatrixUrl, currentScanId])
+
   // Cargar estado de IA y conversaciones al montar
   useEffect(() => {
     const checkAIStatus = async () => {
@@ -313,8 +353,9 @@ export default function AIPanel({
     if (isOpen) {
       checkAIStatus()
       loadConversationsList()
+      loadProjectContext()
     }
-  }, [hypermatrixUrl, isOpen, loadConversationsList])
+  }, [hypermatrixUrl, isOpen, loadConversationsList, loadProjectContext])
 
   // Auto-guardar cuando cambian los mensajes
   useEffect(() => {
@@ -345,7 +386,15 @@ export default function AIPanel({
 
     const userMessage = inputText.trim()
     setInputText('')
-    setMessages(prev => [...prev, { type: 'user', text: userMessage }])
+    setShowCommands(false)
+
+    // Check if it's a special command
+    const isCommand = userMessage.startsWith('/')
+    setMessages(prev => [...prev, {
+      type: 'user',
+      text: userMessage,
+      isCommand
+    }])
     setIsLoading(true)
 
     try {
@@ -356,7 +405,8 @@ export default function AIPanel({
           message: userMessage,
           context: codeInput || contextCode || null,
           model: selectedModel || undefined,
-          system_prompt: getSystemPrompt()
+          system_prompt: getSystemPrompt(),
+          scan_id: currentScanId || projectContext?.scan_id || null
         })
       })
 
@@ -365,7 +415,18 @@ export default function AIPanel({
       }
 
       const data = await response.json()
-      setMessages(prev => [...prev, { type: 'ai', text: data.response }])
+
+      // If command returned data, show it specially
+      if (data.command_data) {
+        setMessages(prev => [...prev, {
+          type: 'command_result',
+          command: data.command,
+          data: data.command_data,
+          text: data.response
+        }])
+      } else {
+        setMessages(prev => [...prev, { type: 'ai', text: data.response }])
+      }
 
       if (onAIResult) {
         onAIResult({ type: 'chat', result: data })
@@ -378,7 +439,7 @@ export default function AIPanel({
     } finally {
       setIsLoading(false)
     }
-  }, [inputText, codeInput, contextCode, selectedModel, hypermatrixUrl, isLoading, onAIResult, getSystemPrompt])
+  }, [inputText, codeInput, contextCode, selectedModel, hypermatrixUrl, isLoading, onAIResult, getSystemPrompt, currentScanId, projectContext])
 
   // Explicar código
   const explainCode = useCallback(async () => {
@@ -507,6 +568,25 @@ export default function AIPanel({
         sendChatMessage()
       }
     }
+    // Escape cierra sugerencias
+    if (e.key === 'Escape') {
+      setShowCommands(false)
+    }
+  }
+
+  // Manejar cambio de input para mostrar comandos
+  const handleInputChange = (e) => {
+    const value = e.target.value
+    setInputText(value)
+    // Show commands if starts with / and no space yet
+    setShowCommands(value.startsWith('/') && !value.includes(' '))
+  }
+
+  // Insertar comando
+  const insertCommand = (cmd) => {
+    setInputText(cmd + ' ')
+    setShowCommands(false)
+    textareaRef.current?.focus()
   }
 
   // Panel cerrado - mostrar solo botón
@@ -721,8 +801,74 @@ export default function AIPanel({
         ) : (
           messages.map((msg, idx) => (
             <div key={idx}>
-              {msg.type === 'user' && <ChatMessage message={msg.text} isUser={true} />}
+              {msg.type === 'user' && (
+                <ChatMessage
+                  message={msg.text}
+                  isUser={true}
+                />
+              )}
               {msg.type === 'ai' && <ChatMessage message={msg.text} isUser={false} />}
+              {msg.type === 'command_result' && (
+                <div className="mb-3">
+                  {/* Command data display */}
+                  {msg.data && (
+                    <div className="bg-[var(--color-bg-tertiary)] rounded-lg p-3 mb-2 text-sm">
+                      {msg.command === 'archivos' && msg.data.files && (
+                        <div>
+                          <div className="text-xs text-[var(--color-fg-tertiary)] mb-2">
+                            📁 {msg.data.total_matches} archivos encontrados
+                          </div>
+                          <div className="space-y-1 max-h-40 overflow-y-auto">
+                            {msg.data.files.slice(0, 15).map((f, i) => (
+                              <div key={i} className="text-xs font-mono text-[var(--color-fg-secondary)] truncate">
+                                {f.filename} <span className="text-[var(--color-fg-tertiary)]">({f.group_size})</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      {msg.command === 'hermanos' && msg.data.siblings && (
+                        <div>
+                          <div className="text-xs text-[var(--color-fg-tertiary)] mb-2">
+                            👥 {msg.data.total_groups} grupos de hermanos
+                          </div>
+                          <div className="space-y-1 max-h-40 overflow-y-auto">
+                            {msg.data.siblings.slice(0, 15).map((s, i) => (
+                              <div key={i} className="text-xs">
+                                <span className="font-mono text-[var(--color-primary)]">{s.filename}</span>
+                                <span className="text-[var(--color-fg-tertiary)]"> ({s.count} copias)</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      {msg.command === 'proyecto' && msg.data.has_project && (
+                        <div className="grid grid-cols-2 gap-2 text-xs">
+                          <div>📦 <span className="text-[var(--color-fg-tertiary)]">Proyecto:</span> {msg.data.project_name}</div>
+                          <div>📄 <span className="text-[var(--color-fg-tertiary)]">Archivos:</span> {msg.data.total_files}</div>
+                          <div>✅ <span className="text-[var(--color-fg-tertiary)]">Analizados:</span> {msg.data.analyzed_files}</div>
+                          <div>👥 <span className="text-[var(--color-fg-tertiary)]">Hermanos:</span> {msg.data.sibling_groups}</div>
+                          <div>🔧 <span className="text-[var(--color-fg-tertiary)]">Funciones:</span> {msg.data.total_functions || 0}</div>
+                          <div>📦 <span className="text-[var(--color-fg-tertiary)]">Clases:</span> {msg.data.total_classes || 0}</div>
+                        </div>
+                      )}
+                      {msg.command === 'leer' && msg.data.content && (
+                        <div>
+                          <div className="text-xs text-[var(--color-fg-tertiary)] mb-2">
+                            📄 {msg.data.filename} ({msg.data.lines} líneas)
+                          </div>
+                          <pre className="text-xs font-mono bg-[var(--color-bg-secondary)] p-2 rounded max-h-60 overflow-auto whitespace-pre-wrap">
+                            {msg.data.content.slice(0, 2000)}
+                            {msg.data.content.length > 2000 && '\n... (truncado)'}
+                          </pre>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  {/* AI response */}
+                  <ChatMessage message={msg.text} isUser={false} />
+                </div>
+              )}
               {msg.type === 'error' && (
                 <div className="text-center text-sm text-[var(--color-error)] py-2">
                   {msg.text}
@@ -765,26 +911,57 @@ export default function AIPanel({
       {/* Input area */}
       <div className="p-4 border-t border-[var(--color-border)] bg-[var(--color-bg-secondary)]">
         {mode === AI_MODES.CHAT && (
-          <div className="flex gap-2">
-            <textarea
-              ref={textareaRef}
-              value={inputText}
-              onChange={(e) => setInputText(e.target.value)}
-              onKeyDown={handleKeyDown}
-              placeholder="Escribe tu mensaje... (Enter para enviar)"
-              className="flex-1 px-3 py-2 text-sm rounded border border-[var(--color-border)] bg-[var(--color-bg-primary)] text-[var(--color-fg-primary)] resize-none focus:outline-none focus:border-[var(--color-primary)]"
-              rows={2}
-              disabled={isLoading}
-            />
-            <Button
-              onClick={sendChatMessage}
-              disabled={!inputText.trim() || isLoading}
-              className="self-end"
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
-              </svg>
-            </Button>
+          <div className="relative">
+            {/* Command suggestions dropdown */}
+            {showCommands && (
+              <div className="absolute bottom-full left-0 right-0 mb-1 bg-[var(--color-bg-primary)] border border-[var(--color-border)] rounded-lg shadow-lg max-h-48 overflow-y-auto z-10">
+                <div className="p-2 text-xs text-[var(--color-fg-tertiary)] border-b border-[var(--color-border)]">
+                  💡 Comandos disponibles:
+                </div>
+                {SPECIAL_COMMANDS.filter(c =>
+                  c.cmd.startsWith(inputText) || inputText === '/'
+                ).map((cmd, i) => (
+                  <button
+                    key={i}
+                    onClick={() => insertCommand(cmd.cmd)}
+                    className="w-full px-3 py-2 text-left text-sm hover:bg-[var(--color-bg-secondary)] flex items-center gap-2"
+                  >
+                    <span className="font-mono text-[var(--color-primary)]">{cmd.cmd}</span>
+                    <span className="text-xs text-[var(--color-fg-tertiary)]">{cmd.desc}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+
+            <div className="flex gap-2">
+              <textarea
+                ref={textareaRef}
+                value={inputText}
+                onChange={handleInputChange}
+                onKeyDown={handleKeyDown}
+                placeholder="Mensaje o /comando... (Enter para enviar)"
+                className="flex-1 px-3 py-2 text-sm rounded border border-[var(--color-border)] bg-[var(--color-bg-primary)] text-[var(--color-fg-primary)] resize-none focus:outline-none focus:border-[var(--color-primary)]"
+                rows={2}
+                disabled={isLoading}
+              />
+              <Button
+                onClick={sendChatMessage}
+                disabled={!inputText.trim() || isLoading}
+                className="self-end"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+                </svg>
+              </Button>
+            </div>
+
+            {/* Project context indicator */}
+            {projectContext?.has_project && (
+              <div className="mt-1 text-xs text-[var(--color-fg-tertiary)] flex items-center gap-1">
+                <span className="w-2 h-2 rounded-full bg-green-500"></span>
+                {projectContext.project_name} ({projectContext.total_files} archivos)
+              </div>
+            )}
           </div>
         )}
 

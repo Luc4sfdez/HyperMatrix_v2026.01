@@ -1,16 +1,23 @@
 """
 HyperMatrix v2026.01 - AI Routes (Ollama Integration)
 Endpoints for AI-powered code analysis using local LLMs.
+With full database and file access for intelligent assistance.
 """
 
 import os
+import re
 import json
 from pathlib import Path
 from typing import Optional, List, Dict, Any
+from glob import glob
 
 from fastapi import APIRouter, HTTPException, Query, Body
 from fastapi.responses import StreamingResponse
 import httpx
+
+# Import app module to access scan data and database
+from .. import app as web_app
+from ..app import active_scans, scan_results
 
 router = APIRouter()
 
@@ -299,19 +306,35 @@ async def chat_about_code(
     history: List[Dict[str, str]] = Body(default=[], description="Chat history"),
     model: Optional[str] = Body(None, description="Model to use"),
     system_prompt: Optional[str] = Body(None, description="Custom system prompt for personality"),
+    scan_id: Optional[str] = Body(None, description="Current scan ID for context"),
 ):
     """
     Chat about code with AI assistant.
     Supports custom personality via system_prompt parameter.
+    Supports special commands starting with / for database and file access.
+
+    Special commands:
+    - /proyecto - Get project summary
+    - /archivos <pattern> - Search files
+    - /hermanos [filename] - Get sibling files
+    - /duplicados - Get duplicate groups
+    - /leer <path> - Read file content
+    - /comparar <path1> <path2> - Compare two files
+    - /ayuda - Show help
     """
     if not await check_ollama_available():
         raise HTTPException(status_code=503, detail="Ollama not available")
 
-    # Use custom system prompt if provided, otherwise use default
+    # Process special commands
+    command_result = await process_special_command(message)
+
+    # Use custom system prompt if provided, otherwise use enhanced default
     if not system_prompt:
-        system_prompt = """Eres un asistente experto en programación y análisis de código.
-Ayudas a los desarrolladores a entender, mejorar y depurar su código.
+        system_prompt = """Eres un asistente experto en programación y análisis de código para HyperMatrix.
+Tienes acceso a la base de datos del proyecto y puedes ver archivos, duplicados y estructura.
+Ayudas a los desarrolladores a entender, mejorar, consolidar y depurar su código.
 Responde de forma clara y concisa en español.
+Si el usuario usa comandos especiales (/proyecto, /archivos, etc.), analiza la información proporcionada.
 Si el usuario proporciona código, analízalo cuidadosamente antes de responder."""
 
     # Build conversation context
@@ -320,8 +343,18 @@ Si el usuario proporciona código, analízalo cuidadosamente antes de responder.
         role = "Usuario" if msg.get("role") == "user" else "Asistente"
         conversation += f"{role}: {msg.get('content', '')}\n\n"
 
-    prompt = f"{conversation}Usuario: {message}"
+    # Build prompt with command context if available
+    if command_result:
+        prompt_addition = command_result.get("prompt_addition", "")
+        prompt = f"""{prompt_addition}
 
+{conversation}Usuario: {message}
+
+Basándote en la información anterior, responde al usuario."""
+    else:
+        prompt = f"{conversation}Usuario: {message}"
+
+    # Add code context if provided
     if context:
         prompt = f"""Código de contexto:
 ```
@@ -330,12 +363,31 @@ Si el usuario proporciona código, analízalo cuidadosamente antes de responder.
 
 {prompt}"""
 
+    # Auto-add project context for better awareness
+    if not command_result and scan_id:
+        try:
+            project_ctx = await get_project_context(scan_id=scan_id)
+            if project_ctx.get("has_project"):
+                project_info = f"""
+[Proyecto actual: {project_ctx.get('project_name')} - {project_ctx.get('total_files')} archivos, {project_ctx.get('sibling_groups')} grupos de hermanos]
+"""
+                prompt = project_info + prompt
+        except:
+            pass
+
     response = await generate_completion(prompt, model, system_prompt)
 
-    return {
+    result = {
         "response": response,
         "model_used": model or OLLAMA_MODEL,
     }
+
+    # Include command data if a special command was processed
+    if command_result:
+        result["command"] = command_result.get("command")
+        result["command_data"] = command_result.get("data")
+
+    return result
 
 
 @router.post("/suggest-refactor")
@@ -377,6 +429,394 @@ Proporciona:
         "language": language,
         "model_used": model or OLLAMA_MODEL,
     }
+
+
+# =============================================================================
+# Context Access Endpoints - Database & File Access for AI
+# =============================================================================
+
+@router.get("/context/project")
+async def get_project_context(scan_id: Optional[str] = Query(None, description="Scan ID")):
+    """
+    Get current project context including stats and summary.
+    This gives the AI awareness of what project is being analyzed.
+    """
+    # If no scan_id provided, get the most recent scan
+    if not scan_id and active_scans:
+        scan_id = list(active_scans.keys())[-1]
+
+    if not scan_id:
+        return {
+            "has_project": False,
+            "message": "No hay proyecto cargado. Escanea un proyecto primero."
+        }
+
+    if scan_id not in active_scans:
+        return {"has_project": False, "message": f"Scan {scan_id} no encontrado"}
+
+    progress = active_scans[scan_id]
+    result = scan_results.get(scan_id, {})
+
+    # Build context summary
+    context = {
+        "has_project": True,
+        "scan_id": scan_id,
+        "project_name": result.get("project_name", "Unknown"),
+        "status": str(progress.status),
+        "total_files": progress.total_files,
+        "analyzed_files": result.get("analyzed_files", 0),
+        "duplicate_groups": result.get("duplicate_groups", 0),
+        "sibling_groups": result.get("sibling_groups", 0),
+    }
+
+    # Add consolidation info if available
+    consolidation = result.get("consolidation")
+    if consolidation and hasattr(consolidation, 'groups'):
+        context["sibling_filenames"] = list(consolidation.groups.keys())[:50]
+
+    # Add analysis summary if available
+    analysis = result.get("analysis")
+    if analysis:
+        context["total_functions"] = getattr(analysis, "total_functions", 0)
+        context["total_classes"] = getattr(analysis, "total_classes", 0)
+        context["errors"] = getattr(analysis, "errors", [])[:10]
+
+    return context
+
+
+@router.get("/context/files")
+async def get_files_context(
+    pattern: str = Query("*", description="File name pattern (e.g., 'config.py', '*.js')"),
+    scan_id: Optional[str] = Query(None, description="Scan ID"),
+    limit: int = Query(50, description="Max files to return"),
+):
+    """
+    Get list of files matching a pattern in the scanned project.
+    Allows the AI to see what files exist.
+    """
+    if not scan_id and active_scans:
+        scan_id = list(active_scans.keys())[-1]
+
+    if not scan_id or scan_id not in scan_results:
+        return {"files": [], "message": "No hay proyecto cargado"}
+
+    result = scan_results.get(scan_id, {})
+    consolidation = result.get("consolidation")
+
+    matching_files = []
+
+    if consolidation and hasattr(consolidation, 'groups'):
+        # Search in sibling groups
+        for filename, group in consolidation.groups.items():
+            if pattern == "*" or pattern in filename or filename.endswith(pattern.replace("*", "")):
+                if hasattr(group, 'files'):
+                    for file_info in group.files[:limit]:
+                        matching_files.append({
+                            "filename": filename,
+                            "path": getattr(file_info, 'path', str(file_info)),
+                            "group_size": len(group.files)
+                        })
+
+    return {
+        "pattern": pattern,
+        "files": matching_files[:limit],
+        "total_matches": len(matching_files),
+    }
+
+
+@router.get("/context/duplicates")
+async def get_duplicates_context(
+    scan_id: Optional[str] = Query(None, description="Scan ID"),
+    limit: int = Query(20, description="Max duplicate groups to return"),
+):
+    """
+    Get duplicate file groups from the scan.
+    Allows the AI to understand what files are duplicated.
+    """
+    if not scan_id and active_scans:
+        scan_id = list(active_scans.keys())[-1]
+
+    if not scan_id or scan_id not in scan_results:
+        return {"duplicates": [], "message": "No hay proyecto cargado"}
+
+    result = scan_results.get(scan_id, {})
+
+    return {
+        "scan_id": scan_id,
+        "total_duplicate_groups": result.get("duplicate_groups", 0),
+        "message": "Usa /context/siblings para ver grupos de archivos hermanos (mismo nombre, diferentes ubicaciones)"
+    }
+
+
+@router.get("/context/siblings")
+async def get_siblings_context(
+    filename: Optional[str] = Query(None, description="Specific filename to get siblings for"),
+    scan_id: Optional[str] = Query(None, description="Scan ID"),
+    limit: int = Query(20, description="Max sibling groups to return"),
+):
+    """
+    Get sibling file groups (same filename, different locations).
+    This is key for consolidation analysis.
+    """
+    if not scan_id and active_scans:
+        scan_id = list(active_scans.keys())[-1]
+
+    if not scan_id or scan_id not in scan_results:
+        return {"siblings": [], "message": "No hay proyecto cargado"}
+
+    result = scan_results.get(scan_id, {})
+    consolidation = result.get("consolidation")
+
+    siblings = []
+
+    if consolidation and hasattr(consolidation, 'groups'):
+        for fname, group in consolidation.groups.items():
+            if filename and filename != fname:
+                continue
+
+            if hasattr(group, 'files'):
+                file_paths = [getattr(f, 'path', str(f)) for f in group.files]
+                siblings.append({
+                    "filename": fname,
+                    "count": len(group.files),
+                    "paths": file_paths[:10],  # Limit paths shown
+                })
+
+        # Sort by count descending
+        siblings.sort(key=lambda x: x["count"], reverse=True)
+
+    return {
+        "scan_id": scan_id,
+        "siblings": siblings[:limit] if not filename else siblings,
+        "total_groups": len(siblings),
+    }
+
+
+@router.get("/context/file-content")
+async def get_file_content_context(
+    path: str = Query(..., description="File path to read"),
+    max_lines: int = Query(200, description="Max lines to return"),
+):
+    """
+    Read content of a specific file.
+    Allows the AI to see actual file contents for analysis.
+    """
+    try:
+        file_path = Path(path)
+
+        # Security: Only allow reading from known project directories
+        # Check if path is within allowed directories
+        allowed_prefixes = ["/projects", "/app", "E:", "C:"]
+        path_str = str(file_path)
+        if not any(path_str.startswith(prefix) for prefix in allowed_prefixes):
+            raise HTTPException(status_code=403, detail="Acceso denegado a esta ruta")
+
+        if not file_path.exists():
+            return {"error": f"Archivo no encontrado: {path}"}
+
+        if file_path.stat().st_size > 1_000_000:  # 1MB limit
+            return {"error": "Archivo demasiado grande (máx 1MB)"}
+
+        # Read file content
+        try:
+            with open(file_path, 'r', encoding='utf-8', errors='replace') as f:
+                lines = f.readlines()[:max_lines]
+                content = ''.join(lines)
+        except Exception as e:
+            return {"error": f"Error leyendo archivo: {str(e)}"}
+
+        return {
+            "path": path,
+            "filename": file_path.name,
+            "content": content,
+            "lines": len(lines),
+            "truncated": len(lines) >= max_lines,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@router.post("/context/compare-files")
+async def compare_files_context(
+    path1: str = Body(..., description="First file path"),
+    path2: str = Body(..., description="Second file path"),
+):
+    """
+    Get content of two files for comparison.
+    """
+    file1 = await get_file_content_context(path1)
+    file2 = await get_file_content_context(path2)
+
+    return {
+        "file1": file1,
+        "file2": file2,
+    }
+
+
+# =============================================================================
+# Enhanced Chat with Special Commands
+# =============================================================================
+
+async def process_special_command(message: str) -> Optional[Dict[str, Any]]:
+    """
+    Process special commands starting with /
+    Returns context data or None if not a command.
+    """
+    message = message.strip()
+
+    if not message.startswith('/'):
+        return None
+
+    parts = message.split(maxsplit=1)
+    command = parts[0].lower()
+    args = parts[1] if len(parts) > 1 else ""
+
+    if command == '/proyecto' or command == '/project':
+        # Get project summary
+        context = await get_project_context()
+        return {
+            "command": "proyecto",
+            "data": context,
+            "prompt_addition": f"""
+CONTEXTO DEL PROYECTO:
+- Nombre: {context.get('project_name', 'N/A')}
+- Archivos totales: {context.get('total_files', 0)}
+- Archivos analizados: {context.get('analyzed_files', 0)}
+- Grupos de duplicados: {context.get('duplicate_groups', 0)}
+- Grupos de hermanos: {context.get('sibling_groups', 0)}
+- Funciones: {context.get('total_functions', 0)}
+- Clases: {context.get('total_classes', 0)}
+"""
+        }
+
+    elif command == '/archivos' or command == '/files':
+        # Search files by pattern
+        pattern = args or "*"
+        files = await get_files_context(pattern=pattern, limit=30)
+        file_list = "\n".join([f"- {f['filename']} ({f['group_size']} copias): {f['path']}"
+                               for f in files.get('files', [])])
+        return {
+            "command": "archivos",
+            "data": files,
+            "prompt_addition": f"""
+ARCHIVOS ENCONTRADOS (patrón: {pattern}):
+{file_list or 'No se encontraron archivos'}
+Total: {files.get('total_matches', 0)} archivos
+"""
+        }
+
+    elif command == '/duplicados' or command == '/duplicates':
+        # Get duplicates
+        duplicates = await get_duplicates_context(limit=20)
+        return {
+            "command": "duplicados",
+            "data": duplicates,
+            "prompt_addition": f"""
+DUPLICADOS EN EL PROYECTO:
+Total de grupos duplicados: {duplicates.get('total_duplicate_groups', 0)}
+"""
+        }
+
+    elif command == '/hermanos' or command == '/siblings':
+        # Get sibling files
+        filename = args if args else None
+        siblings = await get_siblings_context(filename=filename, limit=20)
+        sibling_list = "\n".join([
+            f"- {s['filename']}: {s['count']} copias\n  Ubicaciones: {', '.join(s['paths'][:3])}"
+            for s in siblings.get('siblings', [])
+        ])
+        return {
+            "command": "hermanos",
+            "data": siblings,
+            "prompt_addition": f"""
+ARCHIVOS HERMANOS (mismo nombre, diferentes ubicaciones):
+{sibling_list or 'No se encontraron hermanos'}
+Total grupos: {siblings.get('total_groups', 0)}
+"""
+        }
+
+    elif command == '/leer' or command == '/read':
+        # Read a specific file
+        if not args:
+            return {
+                "command": "leer",
+                "error": "Debes especificar una ruta de archivo",
+                "prompt_addition": "Error: Usa /leer <ruta_archivo> para leer un archivo"
+            }
+        content = await get_file_content_context(path=args)
+        if "error" in content:
+            return {
+                "command": "leer",
+                "error": content["error"],
+                "prompt_addition": f"Error leyendo archivo: {content['error']}"
+            }
+        return {
+            "command": "leer",
+            "data": content,
+            "prompt_addition": f"""
+CONTENIDO DEL ARCHIVO: {content.get('filename', args)}
+Ruta: {content.get('path', args)}
+Líneas: {content.get('lines', 0)} {'(truncado)' if content.get('truncated') else ''}
+
+```
+{content.get('content', '')[:4000]}
+```
+"""
+        }
+
+    elif command == '/comparar' or command == '/compare':
+        # Compare two files
+        file_args = args.split()
+        if len(file_args) < 2:
+            return {
+                "command": "comparar",
+                "error": "Debes especificar dos rutas de archivo",
+                "prompt_addition": "Error: Usa /comparar <ruta1> <ruta2> para comparar dos archivos"
+            }
+
+        file1 = await get_file_content_context(path=file_args[0])
+        file2 = await get_file_content_context(path=file_args[1])
+
+        return {
+            "command": "comparar",
+            "data": {"file1": file1, "file2": file2},
+            "prompt_addition": f"""
+COMPARACIÓN DE ARCHIVOS:
+
+=== ARCHIVO 1: {file1.get('filename', file_args[0])} ===
+{file1.get('content', file1.get('error', 'Error'))[:2000]}
+
+=== ARCHIVO 2: {file2.get('filename', file_args[1])} ===
+{file2.get('content', file2.get('error', 'Error'))[:2000]}
+
+Analiza las diferencias y sugiere cómo consolidarlos.
+"""
+        }
+
+    elif command == '/ayuda' or command == '/help':
+        return {
+            "command": "ayuda",
+            "prompt_addition": """
+COMANDOS DISPONIBLES:
+- /proyecto - Ver resumen del proyecto actual
+- /archivos <patrón> - Buscar archivos (ej: /archivos config.py)
+- /hermanos [archivo] - Ver archivos con mismo nombre en diferentes ubicaciones
+- /duplicados - Ver grupos de archivos duplicados
+- /leer <ruta> - Leer contenido de un archivo
+- /comparar <ruta1> <ruta2> - Comparar dos archivos
+- /ayuda - Mostrar esta ayuda
+
+Ejemplos:
+- /archivos *.py
+- /hermanos config.py
+- /leer E:/proyecto/config.py
+- /comparar archivo1.py archivo2.py
+"""
+        }
+
+    return None
 
 
 # =============================================================================

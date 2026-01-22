@@ -336,7 +336,7 @@ Por favor, analiza estas diferencias y recomienda:
 3. Posibles conflictos al hacer merge
 4. Sugerencias de consolidación`
 
-    ai.openForReview(analysisText, `Comparación: ${comparison.file1.split(/[/\\]/).pop()} vs ${comparison.file2.split(/[/\\]/).pop()}`)
+    ai?.openForReview?.(analysisText, `Comparación: ${comparison.file1.split(/[/\\]/).pop()} vs ${comparison.file2.split(/[/\\]/).pop()}`)
   }, [ai, comparison, content1, content2])
 
   // Comparar archivos

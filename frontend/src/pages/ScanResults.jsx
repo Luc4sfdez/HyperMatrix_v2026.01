@@ -120,6 +120,7 @@ function ExportButtons({ hypermatrixUrl, scanId, onPreview }) {
 export default function ScanResults({ hypermatrixUrl, onNavigate }) {
   const [scans, setScans] = useState([])
   const [loading, setLoading] = useState(false)
+  const [loadingDetails, setLoadingDetails] = useState(false)
   const [selectedScan, setSelectedScan] = useState(null)
   const [selectedScanId, setSelectedScanId] = useState(null)
   const [results, setResults] = useState(null)
@@ -142,24 +143,41 @@ export default function ScanResults({ hypermatrixUrl, onNavigate }) {
   }
 
   const viewResults = async (scanId) => {
+    setLoadingDetails(true)
     try {
-      // Cargar resumen y resultado completo en paralelo
-      const [summaryRes, fullRes] = await Promise.all([
+      // Cargar resumen (rapido) y grupos paginados - NO cargar el resultado completo (320MB+)
+      const [summaryRes, siblingsRes] = await Promise.all([
         fetch(`${hypermatrixUrl}/api/scan/result/${scanId}/summary`),
-        fetch(`${hypermatrixUrl}/api/scan/result/${scanId}`)
+        fetch(`${hypermatrixUrl}/api/consolidation/siblings/${scanId}?limit=50&sort_by=files`)
       ])
       const summary = await summaryRes.json()
-      const full = await fullRes.json()
+      const siblingsData = await siblingsRes.json()
 
-      // Combinar datos
+      // Convertir grupos al formato esperado
+      const siblingDetails = {}
+      if (siblingsData.groups) {
+        siblingsData.groups.forEach(group => {
+          siblingDetails[group.filename] = {
+            files: group.files || [],
+            master_proposal: {
+              proposed_master: { filepath: group.proposed_master },
+              confidence: group.master_confidence,
+              reasons: group.reasons
+            }
+          }
+        })
+      }
+
       setSelectedScan(scanId)
       setSelectedScanId(scanId)
       setResults({
         ...summary,
-        sibling_details: full.consolidation?.groups || {},
+        sibling_details: siblingDetails,
       })
     } catch (error) {
       alert(`Error: ${error.message}`)
+    } finally {
+      setLoadingDetails(false)
     }
   }
 
@@ -180,6 +198,11 @@ export default function ScanResults({ hypermatrixUrl, onNavigate }) {
             <CardContent>
               {loading ? (
                 <p className="text-[var(--color-fg-secondary)] text-center py-8">Cargando...</p>
+              ) : loadingDetails ? (
+                <div className="text-center py-12">
+                  <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-[var(--color-primary)] mb-4"></div>
+                  <p className="text-[var(--color-fg-secondary)]">Cargando detalles del analisis...</p>
+                </div>
               ) : scans.length === 0 ? (
                 <p className="text-[var(--color-fg-secondary)] text-center py-8">
                   No hay análisis disponibles. ¡Crea uno en el Dashboard!
@@ -190,7 +213,8 @@ export default function ScanResults({ hypermatrixUrl, onNavigate }) {
                     <button
                       key={scan.scan_id}
                       onClick={() => viewResults(scan.scan_id)}
-                      className="w-full text-left p-4 rounded-lg border border-[var(--color-border)] hover:border-[var(--color-primary)] hover:bg-[var(--color-bg-secondary)] transition-all group"
+                      disabled={loadingDetails}
+                      className="w-full text-left p-4 rounded-lg border border-[var(--color-border)] hover:border-[var(--color-primary)] hover:bg-[var(--color-bg-secondary)] transition-all group disabled:opacity-50 disabled:cursor-wait"
                     >
                       <div className="flex justify-between items-start">
                         <div className="flex-1 min-w-0">
@@ -285,7 +309,7 @@ export default function ScanResults({ hypermatrixUrl, onNavigate }) {
                 <div className="metric-card">
                   <div className="metric-label">Grupos Hermanos</div>
                   <div className="metric-value text-[#F39C12]">
-                    {results.sibling_groups || 0}
+                    {Array.isArray(results.sibling_groups) ? results.sibling_groups.length : (results.sibling_groups || 0)}
                   </div>
                 </div>
               </div>

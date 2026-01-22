@@ -339,7 +339,9 @@ export default function Explorer({ hypermatrixUrl, ai }) {
     }
 
     // Abrir panel de IA con el código
-    ai.openWithCode(codeInfo, `${item.name || item.module} (${item.filepath})`, language)
+    if (ai?.openWithCode) {
+      ai.openWithCode(codeInfo, `${item.name || item.module} (${item.filepath})`, language)
+    }
   }, [ai])
 
   // Cargar estadísticas al montar

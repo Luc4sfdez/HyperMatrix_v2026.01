@@ -194,7 +194,7 @@ Por favor, analiza este grafo de dependencias y recomienda:
 3. Si las dependencias circulares (si existen) son problemáticas
 4. Sugerencias de refactorización`
 
-    ai.openForReview(analysisText, `Linaje: ${graphData.filepath.split(/[/\\]/).pop()}`)
+    ai?.openForReview?.(analysisText, `Linaje: ${graphData.filepath.split(/[/\\]/).pop()}`)
   }, [ai, graphData])
 
   // Cargar scans disponibles
@@ -234,11 +234,11 @@ Por favor, analiza este grafo de dependencias y recomienda:
           }
         }
 
-        // Fallback: load from DB siblings endpoint
-        const dbResponse = await fetch(`${hypermatrixUrl}/api/db/siblings/${scanId}?limit=200`)
-        if (dbResponse.ok) {
-          const dbData = await dbResponse.json()
-          const files = (dbData.groups || []).map(g => g.filename)
+        // Fallback: load from consolidation siblings endpoint
+        const siblingsResponse = await fetch(`${hypermatrixUrl}/api/consolidation/siblings/${scanId}?limit=200`)
+        if (siblingsResponse.ok) {
+          const siblingsData = await siblingsResponse.json()
+          const files = (siblingsData.groups || []).map(g => g.filename)
           setAvailableFiles(files)
         }
       } catch (err) {

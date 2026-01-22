@@ -11,6 +11,7 @@ export function Sidebar({
         bg-[var(--color-bg-primary)]
         border-r border-[var(--color-border)]
         overflow-y-auto
+        flex flex-col
         ${className}
       `}
       style={{ width }}

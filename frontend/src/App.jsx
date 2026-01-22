@@ -6,6 +6,7 @@ import { SearchBar } from './components/SearchBar'
 import Breadcrumbs, { generateBreadcrumbs } from './components/Breadcrumbs'
 import AIPanel from './components/AIPanel'
 import { AIProvider, useAI } from './contexts/AIContext'
+import ErrorBoundary from './components/ErrorBoundary'
 import Dashboard from './pages/Dashboard'
 import ScanResults from './pages/ScanResults'
 import Analysis from './pages/Analysis'
@@ -33,9 +34,34 @@ function AppContent() {
   const [hypermatrixUrl, setHypermatrixUrl] = useState('http://127.0.0.1:26020')
   const [isConnected, setIsConnected] = useState(false)
   const [sidebarOpen, setSidebarOpen] = useState(true)
+  const [currentScanId, setCurrentScanId] = useState(null) // ID del escaneo actual para contexto de IA
 
   // Hook del panel de IA
   const ai = useAI()
+
+  // Cargar el scan más reciente para contexto de IA
+  useEffect(() => {
+    const loadCurrentScan = async () => {
+      try {
+        const response = await fetch(`${hypermatrixUrl}/api/scan/list`)
+        if (response.ok) {
+          const data = await response.json()
+          if (data.scans && data.scans.length > 0) {
+            // Usar el scan más reciente que esté completado
+            const completedScan = data.scans.find(s => s.status === 'completed') || data.scans[0]
+            if (completedScan) {
+              setCurrentScanId(completedScan.scan_id)
+            }
+          }
+        }
+      } catch (err) {
+        console.error('Error loading current scan:', err)
+      }
+    }
+    if (isConnected) {
+      loadCurrentScan()
+    }
+  }, [hypermatrixUrl, isConnected])
 
   // Navegación con contexto
   const handleNavigate = useCallback((page, data = {}) => {
@@ -222,7 +248,7 @@ function AppContent() {
         </SidebarNavGroup>
       </SidebarNav>
 
-      <div className="absolute bottom-0 left-0 right-0 p-4 border-t border-[var(--color-border)] bg-[var(--color-bg-secondary)]">
+      <div className="mt-auto p-4 border-t border-[var(--color-border)] bg-[var(--color-bg-secondary)]">
         <div className="flex items-center gap-2 text-xs">
           <div className={`w-2 h-2 rounded-full ${isConnected ? 'bg-[var(--color-success)]' : 'bg-[var(--color-error)]'}`}></div>
           <span className="text-[var(--color-fg-secondary)]">
@@ -293,6 +319,7 @@ function AppContent() {
         contextFile={ai.contextFile}
         contextLanguage={ai.contextLanguage}
         onAIResult={ai.handleAIResult}
+        currentScanId={currentScanId}
       />
     </Layout>
   )
@@ -301,8 +328,10 @@ function AppContent() {
 // Componente principal con Provider
 export default function App() {
   return (
-    <AIProvider>
-      <AppContent />
-    </AIProvider>
+    <ErrorBoundary>
+      <AIProvider>
+        <AppContent />
+      </AIProvider>
+    </ErrorBoundary>
   )
 }
