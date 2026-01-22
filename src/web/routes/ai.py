@@ -298,14 +298,18 @@ async def chat_about_code(
     context: Optional[str] = Body(None, description="Code context"),
     history: List[Dict[str, str]] = Body(default=[], description="Chat history"),
     model: Optional[str] = Body(None, description="Model to use"),
+    system_prompt: Optional[str] = Body(None, description="Custom system prompt for personality"),
 ):
     """
     Chat about code with AI assistant.
+    Supports custom personality via system_prompt parameter.
     """
     if not await check_ollama_available():
         raise HTTPException(status_code=503, detail="Ollama not available")
 
-    system_prompt = """Eres un asistente experto en programación y análisis de código.
+    # Use custom system prompt if provided, otherwise use default
+    if not system_prompt:
+        system_prompt = """Eres un asistente experto en programación y análisis de código.
 Ayudas a los desarrolladores a entender, mejorar y depurar su código.
 Responde de forma clara y concisa en español.
 Si el usuario proporciona código, analízalo cuidadosamente antes de responder."""

@@ -9,6 +9,50 @@ const AI_MODES = {
   REVIEW: 'review'
 }
 
+// Personalidades predefinidas para el asistente
+const AI_PERSONALITIES = {
+  default: {
+    name: 'Asistente General',
+    icon: '🤖',
+    prompt: 'Eres un asistente de programación experto. Responde en español de forma clara y concisa.'
+  },
+  reviewer: {
+    name: 'Code Reviewer',
+    icon: '🔍',
+    prompt: 'Eres un revisor de código senior muy exigente. Analiza el código buscando: bugs, malas prácticas, problemas de rendimiento, seguridad y mantenibilidad. Sé directo y específico con tus críticas. Responde en español.'
+  },
+  teacher: {
+    name: 'Profesor',
+    icon: '👨‍🏫',
+    prompt: 'Eres un profesor de programación paciente y didáctico. Explica los conceptos paso a paso, usa analogías simples y asegúrate de que el estudiante entienda. Responde en español.'
+  },
+  security: {
+    name: 'Experto Seguridad',
+    icon: '🛡️',
+    prompt: 'Eres un experto en ciberseguridad y auditoría de código. Tu enfoque principal es detectar vulnerabilidades: inyección SQL, XSS, CSRF, exposición de datos sensibles, autenticación débil, etc. Responde en español con severidad y recomendaciones de mitigación.'
+  },
+  architect: {
+    name: 'Arquitecto Software',
+    icon: '🏗️',
+    prompt: 'Eres un arquitecto de software senior. Analiza el código desde una perspectiva de diseño: patrones, SOLID, separación de responsabilidades, escalabilidad y mantenibilidad a largo plazo. Responde en español.'
+  },
+  optimizer: {
+    name: 'Optimizador',
+    icon: '⚡',
+    prompt: 'Eres un experto en optimización y rendimiento. Analiza el código buscando: complejidad algorítmica, uso de memoria, operaciones costosas, cuellos de botella y oportunidades de mejora de rendimiento. Responde en español con métricas cuando sea posible.'
+  },
+  documenter: {
+    name: 'Documentador',
+    icon: '📝',
+    prompt: 'Eres un experto en documentación técnica. Tu trabajo es generar documentación clara: docstrings, comentarios explicativos, README, diagramas de flujo en texto, y explicaciones para otros desarrolladores. Responde en español.'
+  },
+  refactor: {
+    name: 'Refactorizador',
+    icon: '🔧',
+    prompt: 'Eres un experto en refactorización de código. Propones mejoras concretas para hacer el código más limpio, legible y mantenible. Muestra el antes y después cuando sea posible. Responde en español.'
+  }
+}
+
 // Componente de mensaje de chat
 function ChatMessage({ message, isUser }) {
   return (
@@ -71,8 +115,15 @@ export default function AIPanel({
   const [aiStatus, setAiStatus] = useState(null)
   const [selectedModel, setSelectedModel] = useState('')
   const [availableModels, setAvailableModels] = useState([])
+  const [personality, setPersonality] = useState('default')
+  const [showPersonalityMenu, setShowPersonalityMenu] = useState(false)
   const messagesEndRef = useRef(null)
   const textareaRef = useRef(null)
+
+  // Obtener prompt de personalidad actual
+  const getSystemPrompt = useCallback(() => {
+    return AI_PERSONALITIES[personality]?.prompt || AI_PERSONALITIES.default.prompt
+  }, [personality])
 
   // Scroll al final de mensajes
   const scrollToBottom = () => {
@@ -133,7 +184,8 @@ export default function AIPanel({
         body: JSON.stringify({
           message: userMessage,
           context: codeInput || contextCode || null,
-          model: selectedModel || undefined
+          model: selectedModel || undefined,
+          system_prompt: getSystemPrompt()
         })
       })
 
@@ -155,7 +207,7 @@ export default function AIPanel({
     } finally {
       setIsLoading(false)
     }
-  }, [inputText, codeInput, contextCode, selectedModel, hypermatrixUrl, isLoading, onAIResult])
+  }, [inputText, codeInput, contextCode, selectedModel, hypermatrixUrl, isLoading, onAIResult, getSystemPrompt])
 
   // Explicar código
   const explainCode = useCallback(async () => {
@@ -323,9 +375,10 @@ export default function AIPanel({
         </button>
       </div>
 
-      {/* Model selector */}
-      {availableModels.length > 0 && (
-        <div className="px-4 py-2 border-b border-[var(--color-border)] bg-[var(--color-bg-secondary)]">
+      {/* Model & Personality selector */}
+      <div className="px-4 py-2 border-b border-[var(--color-border)] bg-[var(--color-bg-secondary)] space-y-2">
+        {/* Model */}
+        {availableModels.length > 0 && (
           <select
             value={selectedModel}
             onChange={(e) => setSelectedModel(e.target.value)}
@@ -335,8 +388,49 @@ export default function AIPanel({
               <option key={model} value={model}>{model}</option>
             ))}
           </select>
+        )}
+
+        {/* Personality selector */}
+        <div className="relative">
+          <button
+            onClick={() => setShowPersonalityMenu(!showPersonalityMenu)}
+            className="w-full px-2 py-1 text-sm rounded border border-[var(--color-border)] bg-[var(--color-bg-primary)] text-[var(--color-fg-primary)] flex items-center justify-between hover:border-[var(--color-primary)]"
+          >
+            <span>
+              {AI_PERSONALITIES[personality]?.icon} {AI_PERSONALITIES[personality]?.name}
+            </span>
+            <span className="text-[var(--color-fg-tertiary)]">▼</span>
+          </button>
+
+          {showPersonalityMenu && (
+            <div className="absolute top-full left-0 right-0 mt-1 bg-[var(--color-bg-primary)] border border-[var(--color-border)] rounded-lg shadow-lg z-10 max-h-64 overflow-y-auto">
+              {Object.entries(AI_PERSONALITIES).map(([key, p]) => (
+                <button
+                  key={key}
+                  onClick={() => {
+                    setPersonality(key)
+                    setShowPersonalityMenu(false)
+                    // Notify user of personality change
+                    setMessages(prev => [...prev, {
+                      type: 'system',
+                      text: `Personalidad cambiada a: ${p.icon} ${p.name}`
+                    }])
+                  }}
+                  className={`w-full px-3 py-2 text-left text-sm hover:bg-[var(--color-bg-secondary)] flex items-start gap-2 ${
+                    personality === key ? 'bg-[var(--color-primary)] bg-opacity-10' : ''
+                  }`}
+                >
+                  <span className="text-lg">{p.icon}</span>
+                  <div>
+                    <div className="font-medium text-[var(--color-fg-primary)]">{p.name}</div>
+                    <div className="text-xs text-[var(--color-fg-tertiary)] line-clamp-2">{p.prompt.slice(0, 80)}...</div>
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
         </div>
-      )}
+      </div>
 
       {/* Mode tabs */}
       <div className="flex border-b border-[var(--color-border)]">
