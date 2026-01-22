@@ -377,3 +377,164 @@ Proporciona:
         "language": language,
         "model_used": model or OLLAMA_MODEL,
     }
+
+
+# =============================================================================
+# Conversation Persistence
+# =============================================================================
+
+import sqlite3
+from datetime import datetime
+import uuid
+
+# Database path for conversations
+CONVERSATIONS_DB = os.path.join(os.getenv("DATA_DIR", "/app/data"), "ai_conversations.db")
+
+
+def init_conversations_db():
+    """Initialize the conversations database."""
+    os.makedirs(os.path.dirname(CONVERSATIONS_DB), exist_ok=True)
+    conn = sqlite3.connect(CONVERSATIONS_DB)
+    cursor = conn.cursor()
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS conversations (
+            id TEXT PRIMARY KEY,
+            title TEXT,
+            personality TEXT DEFAULT 'default',
+            model TEXT,
+            created_at TEXT,
+            updated_at TEXT,
+            messages TEXT
+        )
+    """)
+    conn.commit()
+    conn.close()
+
+
+# Initialize DB on module load
+try:
+    init_conversations_db()
+except Exception:
+    pass
+
+
+@router.get("/conversations")
+async def list_conversations(
+    limit: int = Query(50, description="Max conversations to return"),
+    offset: int = Query(0, description="Offset for pagination"),
+):
+    """List all saved conversations."""
+    try:
+        conn = sqlite3.connect(CONVERSATIONS_DB)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT id, title, personality, model, created_at, updated_at,
+                   (SELECT COUNT(*) FROM json_each(messages)) as message_count
+            FROM conversations
+            ORDER BY updated_at DESC
+            LIMIT ? OFFSET ?
+        """, (limit, offset))
+        rows = cursor.fetchall()
+        conn.close()
+
+        return {
+            "conversations": [dict(row) for row in rows],
+            "total": len(rows),
+        }
+    except Exception as e:
+        return {"conversations": [], "total": 0, "error": str(e)}
+
+
+@router.get("/conversations/{conversation_id}")
+async def get_conversation(conversation_id: str):
+    """Get a specific conversation by ID."""
+    try:
+        conn = sqlite3.connect(CONVERSATIONS_DB)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT * FROM conversations WHERE id = ?
+        """, (conversation_id,))
+        row = cursor.fetchone()
+        conn.close()
+
+        if not row:
+            raise HTTPException(status_code=404, detail="Conversation not found")
+
+        result = dict(row)
+        result["messages"] = json.loads(result["messages"]) if result["messages"] else []
+        return result
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/conversations")
+async def save_conversation(
+    id: Optional[str] = Body(None, description="Conversation ID (auto-generated if not provided)"),
+    title: str = Body("Nueva conversación", description="Conversation title"),
+    personality: str = Body("default", description="AI personality used"),
+    model: str = Body(None, description="Model used"),
+    messages: List[Dict[str, Any]] = Body(default=[], description="Conversation messages"),
+):
+    """Save or update a conversation."""
+    try:
+        conn = sqlite3.connect(CONVERSATIONS_DB)
+        cursor = conn.cursor()
+
+        now = datetime.now().isoformat()
+        conv_id = id or str(uuid.uuid4())[:8]
+        messages_json = json.dumps(messages, ensure_ascii=False)
+
+        # Check if conversation exists
+        cursor.execute("SELECT id FROM conversations WHERE id = ?", (conv_id,))
+        exists = cursor.fetchone()
+
+        if exists:
+            # Update existing
+            cursor.execute("""
+                UPDATE conversations
+                SET title = ?, personality = ?, model = ?, updated_at = ?, messages = ?
+                WHERE id = ?
+            """, (title, personality, model, now, messages_json, conv_id))
+        else:
+            # Insert new
+            cursor.execute("""
+                INSERT INTO conversations (id, title, personality, model, created_at, updated_at, messages)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            """, (conv_id, title, personality, model, now, now, messages_json))
+
+        conn.commit()
+        conn.close()
+
+        return {
+            "id": conv_id,
+            "title": title,
+            "saved": True,
+            "updated_at": now,
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.delete("/conversations/{conversation_id}")
+async def delete_conversation(conversation_id: str):
+    """Delete a conversation."""
+    try:
+        conn = sqlite3.connect(CONVERSATIONS_DB)
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM conversations WHERE id = ?", (conversation_id,))
+        deleted = cursor.rowcount > 0
+        conn.commit()
+        conn.close()
+
+        if not deleted:
+            raise HTTPException(status_code=404, detail="Conversation not found")
+
+        return {"deleted": True, "id": conversation_id}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))

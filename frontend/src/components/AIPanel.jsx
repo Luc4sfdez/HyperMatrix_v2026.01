@@ -117,13 +117,173 @@ export default function AIPanel({
   const [availableModels, setAvailableModels] = useState([])
   const [personality, setPersonality] = useState('default')
   const [showPersonalityMenu, setShowPersonalityMenu] = useState(false)
+  const [conversationId, setConversationId] = useState(null)
+  const [conversationTitle, setConversationTitle] = useState('Nueva conversación')
+  const [savedConversations, setSavedConversations] = useState([])
+  const [showHistory, setShowHistory] = useState(false)
+  const [autoSave, setAutoSave] = useState(true)
   const messagesEndRef = useRef(null)
   const textareaRef = useRef(null)
+
+  // LocalStorage key
+  const LOCAL_STORAGE_KEY = 'hypermatrix_ai_conversations'
 
   // Obtener prompt de personalidad actual
   const getSystemPrompt = useCallback(() => {
     return AI_PERSONALITIES[personality]?.prompt || AI_PERSONALITIES.default.prompt
   }, [personality])
+
+  // Guardar conversación en localStorage
+  const saveToLocalStorage = useCallback((convId, title, msgs) => {
+    try {
+      const stored = JSON.parse(localStorage.getItem(LOCAL_STORAGE_KEY) || '{}')
+      stored[convId] = {
+        id: convId,
+        title,
+        personality,
+        model: selectedModel,
+        messages: msgs,
+        updatedAt: new Date().toISOString()
+      }
+      localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(stored))
+    } catch (err) {
+      console.error('Error saving to localStorage:', err)
+    }
+  }, [personality, selectedModel])
+
+  // Guardar conversación en backend
+  const saveToBackend = useCallback(async (convId, title, msgs) => {
+    try {
+      await fetch(`${hypermatrixUrl}/api/ai/conversations`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: convId,
+          title,
+          personality,
+          model: selectedModel,
+          messages: msgs
+        })
+      })
+    } catch (err) {
+      console.error('Error saving to backend:', err)
+    }
+  }, [hypermatrixUrl, personality, selectedModel])
+
+  // Guardar conversación (localStorage + backend)
+  const saveConversation = useCallback(async (msgs = messages) => {
+    if (msgs.length === 0) return
+
+    const convId = conversationId || `conv_${Date.now().toString(36)}`
+    if (!conversationId) setConversationId(convId)
+
+    // Auto-generate title from first user message
+    let title = conversationTitle
+    if (title === 'Nueva conversación' && msgs.length > 0) {
+      const firstUserMsg = msgs.find(m => m.type === 'user')
+      if (firstUserMsg) {
+        title = firstUserMsg.text.slice(0, 50) + (firstUserMsg.text.length > 50 ? '...' : '')
+        setConversationTitle(title)
+      }
+    }
+
+    saveToLocalStorage(convId, title, msgs)
+    await saveToBackend(convId, title, msgs)
+  }, [messages, conversationId, conversationTitle, saveToLocalStorage, saveToBackend])
+
+  // Cargar lista de conversaciones
+  const loadConversationsList = useCallback(async () => {
+    // Cargar de localStorage
+    try {
+      const stored = JSON.parse(localStorage.getItem(LOCAL_STORAGE_KEY) || '{}')
+      const localConvs = Object.values(stored).sort((a, b) =>
+        new Date(b.updatedAt) - new Date(a.updatedAt)
+      )
+
+      // También cargar de backend
+      const response = await fetch(`${hypermatrixUrl}/api/ai/conversations?limit=50`)
+      if (response.ok) {
+        const data = await response.json()
+        // Merge local and backend conversations
+        const backendIds = new Set(data.conversations.map(c => c.id))
+        const merged = [
+          ...data.conversations,
+          ...localConvs.filter(c => !backendIds.has(c.id))
+        ].sort((a, b) => new Date(b.updatedAt || b.updated_at) - new Date(a.updatedAt || a.updated_at))
+        setSavedConversations(merged.slice(0, 50))
+      } else {
+        setSavedConversations(localConvs)
+      }
+    } catch (err) {
+      console.error('Error loading conversations:', err)
+    }
+  }, [hypermatrixUrl])
+
+  // Cargar una conversación específica
+  const loadConversation = useCallback(async (convId) => {
+    try {
+      // Primero intentar localStorage
+      const stored = JSON.parse(localStorage.getItem(LOCAL_STORAGE_KEY) || '{}')
+      if (stored[convId]) {
+        const conv = stored[convId]
+        setConversationId(convId)
+        setConversationTitle(conv.title)
+        setMessages(conv.messages || [])
+        setPersonality(conv.personality || 'default')
+        if (conv.model) setSelectedModel(conv.model)
+        setShowHistory(false)
+        return
+      }
+
+      // Si no está en local, cargar del backend
+      const response = await fetch(`${hypermatrixUrl}/api/ai/conversations/${convId}`)
+      if (response.ok) {
+        const conv = await response.json()
+        setConversationId(convId)
+        setConversationTitle(conv.title)
+        setMessages(conv.messages || [])
+        setPersonality(conv.personality || 'default')
+        if (conv.model) setSelectedModel(conv.model)
+        // Guardar en localStorage para cache
+        saveToLocalStorage(convId, conv.title, conv.messages)
+      }
+      setShowHistory(false)
+    } catch (err) {
+      console.error('Error loading conversation:', err)
+    }
+  }, [hypermatrixUrl, saveToLocalStorage])
+
+  // Eliminar conversación
+  const deleteConversation = useCallback(async (convId) => {
+    try {
+      // Eliminar de localStorage
+      const stored = JSON.parse(localStorage.getItem(LOCAL_STORAGE_KEY) || '{}')
+      delete stored[convId]
+      localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(stored))
+
+      // Eliminar del backend
+      await fetch(`${hypermatrixUrl}/api/ai/conversations/${convId}`, { method: 'DELETE' })
+
+      // Actualizar lista
+      setSavedConversations(prev => prev.filter(c => c.id !== convId))
+
+      // Si es la conversación actual, crear nueva
+      if (convId === conversationId) {
+        newConversation()
+      }
+    } catch (err) {
+      console.error('Error deleting conversation:', err)
+    }
+  }, [hypermatrixUrl, conversationId])
+
+  // Nueva conversación
+  const newConversation = useCallback(() => {
+    setConversationId(null)
+    setConversationTitle('Nueva conversación')
+    setMessages([])
+    setCodeInput('')
+    setShowHistory(false)
+  }, [])
 
   // Scroll al final de mensajes
   const scrollToBottom = () => {
@@ -134,7 +294,7 @@ export default function AIPanel({
     scrollToBottom()
   }, [messages])
 
-  // Cargar estado de IA al montar
+  // Cargar estado de IA y conversaciones al montar
   useEffect(() => {
     const checkAIStatus = async () => {
       try {
@@ -152,8 +312,19 @@ export default function AIPanel({
 
     if (isOpen) {
       checkAIStatus()
+      loadConversationsList()
     }
-  }, [hypermatrixUrl, isOpen])
+  }, [hypermatrixUrl, isOpen, loadConversationsList])
+
+  // Auto-guardar cuando cambian los mensajes
+  useEffect(() => {
+    if (autoSave && messages.length > 0 && messages.some(m => m.type === 'user' || m.type === 'ai')) {
+      const timer = setTimeout(() => {
+        saveConversation(messages)
+      }, 1000) // Debounce 1 segundo
+      return () => clearTimeout(timer)
+    }
+  }, [messages, autoSave, saveConversation])
 
   // Actualizar código cuando viene del contexto
   useEffect(() => {
@@ -359,21 +530,97 @@ export default function AIPanel({
       <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--color-border)] bg-[var(--color-bg-secondary)]">
         <div className="flex items-center gap-2">
           <span className="text-lg">🤖</span>
-          <span className="font-semibold text-[var(--color-fg-primary)]">Asistente IA</span>
+          <div className="flex flex-col">
+            <span className="font-semibold text-[var(--color-fg-primary)] text-sm">Asistente IA</span>
+            <span className="text-xs text-[var(--color-fg-tertiary)] truncate max-w-[150px]" title={conversationTitle}>
+              {conversationTitle}
+            </span>
+          </div>
           {aiStatus?.available && (
             <span className="w-2 h-2 rounded-full bg-green-500" title="Conectado"></span>
           )}
         </div>
-        <button
-          onClick={onToggle}
-          className="p-1 rounded hover:bg-[var(--color-bg-tertiary)] text-[var(--color-fg-secondary)]"
-          title="Cerrar panel"
-        >
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-          </svg>
-        </button>
+        <div className="flex items-center gap-1">
+          <button
+            onClick={newConversation}
+            className="p-1.5 rounded hover:bg-[var(--color-bg-tertiary)] text-[var(--color-fg-secondary)]"
+            title="Nueva conversación"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+            </svg>
+          </button>
+          <button
+            onClick={() => { setShowHistory(!showHistory); if (!showHistory) loadConversationsList(); }}
+            className={`p-1.5 rounded hover:bg-[var(--color-bg-tertiary)] ${showHistory ? 'text-[var(--color-primary)]' : 'text-[var(--color-fg-secondary)]'}`}
+            title="Historial de conversaciones"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+          </button>
+          <button
+            onClick={onToggle}
+            className="p-1.5 rounded hover:bg-[var(--color-bg-tertiary)] text-[var(--color-fg-secondary)]"
+            title="Cerrar panel"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
       </div>
+
+      {/* History panel */}
+      {showHistory && (
+        <div className="absolute top-14 left-0 right-0 bottom-0 bg-[var(--color-bg-primary)] z-10 overflow-y-auto">
+          <div className="p-4">
+            <h3 className="font-semibold text-[var(--color-fg-primary)] mb-3">Conversaciones guardadas</h3>
+            {savedConversations.length === 0 ? (
+              <p className="text-sm text-[var(--color-fg-tertiary)] text-center py-8">
+                No hay conversaciones guardadas
+              </p>
+            ) : (
+              <div className="space-y-2">
+                {savedConversations.map((conv) => (
+                  <div
+                    key={conv.id}
+                    className={`p-3 rounded-lg border cursor-pointer transition-colors ${
+                      conv.id === conversationId
+                        ? 'border-[var(--color-primary)] bg-[var(--color-primary)] bg-opacity-10'
+                        : 'border-[var(--color-border)] hover:border-[var(--color-primary)] hover:bg-[var(--color-bg-secondary)]'
+                    }`}
+                    onClick={() => loadConversation(conv.id)}
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium text-sm text-[var(--color-fg-primary)] truncate">
+                          {conv.title || 'Sin título'}
+                        </p>
+                        <p className="text-xs text-[var(--color-fg-tertiary)]">
+                          {AI_PERSONALITIES[conv.personality]?.icon || '🤖'} {AI_PERSONALITIES[conv.personality]?.name || 'General'}
+                        </p>
+                        <p className="text-xs text-[var(--color-fg-tertiary)]">
+                          {new Date(conv.updatedAt || conv.updated_at).toLocaleDateString()}
+                        </p>
+                      </div>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); deleteConversation(conv.id); }}
+                        className="p-1 rounded hover:bg-[var(--color-error)] hover:bg-opacity-20 text-[var(--color-fg-tertiary)] hover:text-[var(--color-error)]"
+                        title="Eliminar"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                        </svg>
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Model & Personality selector */}
       <div className="px-4 py-2 border-b border-[var(--color-border)] bg-[var(--color-bg-secondary)] space-y-2">
