@@ -87,12 +87,18 @@ export default function FileBrowser({
 
   const navigateUp = () => {
     const parts = currentPath.replace(/\\/g, '/').split('/').filter(Boolean)
-    if (parts.length > 1) {
+    if (parts.length > 0) {
       parts.pop()
-      const newPath = parts.join('/') + '/'
-      navigateTo(newPath)
+      const newPath = '/' + parts.join('/')
+      navigateTo(newPath || '/')
     }
   }
+
+  // Quick navigation locations
+  const quickLocations = [
+    { path: '/projects', label: '📂 Proyectos', desc: 'Solo lectura' },
+    { path: '/workspace', label: '📁 Workspace', desc: '20GB disponibles' },
+  ]
 
   const handleItemClick = (item) => {
     if (item.is_dir) {
@@ -165,6 +171,24 @@ export default function FileBrowser({
           >
             ✕
           </button>
+        </div>
+
+        {/* Quick locations */}
+        <div className="px-3 pt-3 flex gap-2">
+          {quickLocations.map(loc => (
+            <button
+              key={loc.path}
+              onClick={() => navigateTo(loc.path)}
+              className={`px-3 py-1.5 rounded text-sm transition-colors ${
+                currentPath.startsWith(loc.path)
+                  ? 'bg-[var(--color-primary)] text-white'
+                  : 'bg-[var(--color-bg-secondary)] text-[var(--color-fg-primary)] hover:bg-[var(--color-bg-tertiary)]'
+              }`}
+              title={loc.desc}
+            >
+              {loc.label}
+            </button>
+          ))}
         </div>
 
         {/* Path bar */}
