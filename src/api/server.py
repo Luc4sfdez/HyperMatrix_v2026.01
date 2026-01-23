@@ -3,6 +3,7 @@ HyperMatrix v2026 - API Server
 FastAPI-based REST API for code analysis.
 """
 
+import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
@@ -11,20 +12,26 @@ from .routes import projects, search, analysis, lineage
 from .dependencies import set_db, get_db
 from ..core.db_manager import DBManager
 
+# Database path - use DATA_DIR env var for persistence in Docker volume
+DATA_DIR = os.getenv("DATA_DIR", "/app/data")
+DEFAULT_DB_PATH = os.path.join(DATA_DIR, "hypermatrix.db")
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan manager."""
-    db_path = app.state.db_path if hasattr(app.state, 'db_path') else "hypermatrix.db"
+    db_path = app.state.db_path if hasattr(app.state, 'db_path') else DEFAULT_DB_PATH
     set_db(DBManager(db_path))
     yield
     # Cleanup if needed
 
 
 def create_app(
-    db_path: str = "hypermatrix.db",
+    db_path: str = None,
     debug: bool = False,
 ) -> FastAPI:
+    if db_path is None:
+        db_path = DEFAULT_DB_PATH
     """Create and configure FastAPI application."""
 
     app = FastAPI(

@@ -4,12 +4,17 @@ FastAPI-based web interface for code analysis and consolidation.
 """
 
 import asyncio
+import os
 import uuid
 from pathlib import Path
 from typing import Dict, Optional
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException, BackgroundTasks
+
+# Database path - use DATA_DIR env var for persistence in Docker volume
+DATA_DIR = os.getenv("DATA_DIR", "/app/data")
+DEFAULT_DB_PATH = os.path.join(DATA_DIR, "hypermatrix.db")
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse, FileResponse
@@ -38,12 +43,15 @@ rules_config: Optional[RulesConfig] = None
 async def lifespan(app: FastAPI):
     """Application lifespan manager."""
     global db_manager, rules_config
-    db_path = getattr(app.state, 'db_path', 'hypermatrix.db')
+    db_path = getattr(app.state, 'db_path', DEFAULT_DB_PATH)
     db_manager = DBManager(db_path)
     rules_config = load_rules_config()
 
+    # Ensure data directory exists
+    os.makedirs(os.path.dirname(db_path), exist_ok=True)
+
     # Load persisted projects/scans from database on startup
-    print("[HyperMatrix] Starting up...")
+    print(f"[HyperMatrix] Starting up... (DB: {db_path})")
     try:
         with db_manager._get_connection() as conn:
             cursor = conn.cursor()
@@ -106,9 +114,12 @@ def load_rules_config() -> RulesConfig:
 
 
 def create_web_app(
-    db_path: str = "hypermatrix.db",
+    db_path: str = None,
     debug: bool = False,
 ) -> FastAPI:
+    # Use default persistent path if not specified
+    if db_path is None:
+        db_path = DEFAULT_DB_PATH
     """Create and configure the web application."""
 
     app = FastAPI(

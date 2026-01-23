@@ -3,6 +3,7 @@ HyperMatrix v2026 - Database Manager
 SQLite database for storing analysis results.
 """
 
+import os
 import sqlite3
 import json
 from dataclasses import asdict
@@ -18,11 +19,17 @@ from ..parsers import (
     JSONParseResult,
 )
 
+# Default database path - uses DATA_DIR for Docker persistence
+_DATA_DIR = os.getenv("DATA_DIR", "/app/data")
+_DEFAULT_DB_PATH = os.path.join(_DATA_DIR, "hypermatrix.db")
+
 
 class DBManager:
     """SQLite database manager for analysis results."""
 
-    def __init__(self, db_path: str = "hypermatrix.db"):
+    def __init__(self, db_path: str = None):
+        if db_path is None:
+            db_path = _DEFAULT_DB_PATH
         self.db_path = db_path
         self._init_database()
 
