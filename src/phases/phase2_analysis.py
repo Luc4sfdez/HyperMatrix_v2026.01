@@ -23,10 +23,14 @@ from ..parsers import (
     JavaScriptParser,
     MarkdownParser,
     JSONParser,
+    HTMLParser,
+    CSSParser,
     ParseResult,
     JSParseResult,
     MDParseResult,
     JSONParseResult,
+    HTMLParseResult,
+    CSSParseResult,
     DataFlowType,
 )
 from ..core.db_manager import DBManager
@@ -111,6 +115,14 @@ class Phase2Analysis:
         ".md": "markdown",
         ".markdown": "markdown",
         ".json": "json",
+        ".html": "html",
+        ".htm": "html",
+        ".css": "css",
+        ".scss": "css",
+        ".sass": "css",
+        ".less": "css",
+        ".yaml": "yaml",
+        ".yml": "yaml",
     }
 
     def __init__(
@@ -128,6 +140,8 @@ class Phase2Analysis:
         self.js_parser = JavaScriptParser()
         self.md_parser = MarkdownParser()
         self.json_parser = JSONParser()
+        self.html_parser = HTMLParser()
+        self.css_parser = CSSParser()
 
         self.result = Phase2Result()
         self._dedup_result: Optional[DeduplicationResult] = None
@@ -264,6 +278,25 @@ class Phase2Analysis:
                 result.parse_result = parse_result
                 logger.debug(f"Parsed JSON: {file_meta.filename} - "
                            f"{len(parse_result.keys)} keys")
+
+            elif file_type == "html":
+                parse_result = self.html_parser.parse_file(file_meta.filepath)
+                result.parse_result = parse_result
+                logger.debug(f"Parsed HTML: {file_meta.filename} - "
+                           f"{parse_result.tag_count} tags, "
+                           f"{len(parse_result.scripts)} scripts")
+
+            elif file_type == "css":
+                parse_result = self.css_parser.parse_file(file_meta.filepath)
+                result.parse_result = parse_result
+                logger.debug(f"Parsed CSS: {file_meta.filename} - "
+                           f"{parse_result.selector_count} selectors, "
+                           f"{parse_result.property_count} properties")
+
+            elif file_type == "yaml":
+                # YAML files are read as text for now, no specific parser
+                result.parse_result = None
+                logger.debug(f"Scanned YAML: {file_meta.filename}")
 
             else:
                 result.success = False

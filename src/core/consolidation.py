@@ -22,6 +22,10 @@ from ..parsers import (
     JSParseResult,
     FunctionInfo,
     ClassInfo,
+    MDParseResult,
+    JSONParseResult,
+    HTMLParseResult,
+    CSSParseResult,
 )
 
 if TYPE_CHECKING:
@@ -278,9 +282,13 @@ class ConsolidationEngine:
         if pr1 is None or pr2 is None:
             return 0.5  # Neutral if no parse results
 
+        # Ensure both are same type
+        if type(pr1) != type(pr2):
+            return 0.3  # Different types have low structural similarity
+
         scores = []
 
-        # Compare function counts
+        # Python and JavaScript: compare functions, classes, imports
         if isinstance(pr1, (ParseResult, JSParseResult)):
             funcs1 = set(f.name for f in pr1.functions) if hasattr(pr1, 'functions') else set()
             funcs2 = set(f.name for f in pr2.functions) if hasattr(pr2, 'functions') else set()
@@ -308,6 +316,116 @@ class ConsolidationEngine:
                     intersection = len(imports1 & imports2)
                     union = len(imports1 | imports2)
                     scores.append(intersection / union if union > 0 else 1.0)
+
+        # Markdown: compare headings, links, code blocks
+        elif isinstance(pr1, MDParseResult):
+            # Compare headings
+            heads1 = set(h.text.lower() for h in pr1.headings)
+            heads2 = set(h.text.lower() for h in pr2.headings)
+            if heads1 or heads2:
+                intersection = len(heads1 & heads2)
+                union = len(heads1 | heads2)
+                scores.append(intersection / union if union > 0 else 1.0)
+
+            # Compare link URLs
+            links1 = set(l.url for l in pr1.links)
+            links2 = set(l.url for l in pr2.links)
+            if links1 or links2:
+                intersection = len(links1 & links2)
+                union = len(links1 | links2)
+                scores.append(intersection / union if union > 0 else 1.0)
+
+            # Compare code block languages
+            langs1 = set(cb.language for cb in pr1.code_blocks if cb.language)
+            langs2 = set(cb.language for cb in pr2.code_blocks if cb.language)
+            if langs1 or langs2:
+                intersection = len(langs1 & langs2)
+                union = len(langs1 | langs2)
+                scores.append(intersection / union if union > 0 else 1.0)
+
+        # JSON: compare top-level keys and structure
+        elif isinstance(pr1, JSONParseResult):
+            # Compare top-level keys
+            keys1 = set(k.key for k in pr1.keys if k.depth == 0)
+            keys2 = set(k.key for k in pr2.keys if k.depth == 0)
+            if keys1 or keys2:
+                intersection = len(keys1 & keys2)
+                union = len(keys1 | keys2)
+                scores.append(intersection / union if union > 0 else 1.0)
+
+            # Compare all unique keys (deep)
+            all_keys1 = set(k.key for k in pr1.keys)
+            all_keys2 = set(k.key for k in pr2.keys)
+            if all_keys1 or all_keys2:
+                intersection = len(all_keys1 & all_keys2)
+                union = len(all_keys1 | all_keys2)
+                scores.append(intersection / union if union > 0 else 1.0)
+
+        # HTML: compare tags, scripts, styles
+        elif isinstance(pr1, HTMLParseResult):
+            # Compare unique tags
+            tags1 = pr1.unique_tags
+            tags2 = pr2.unique_tags
+            if tags1 or tags2:
+                intersection = len(tags1 & tags2)
+                union = len(tags1 | tags2)
+                scores.append(intersection / union if union > 0 else 1.0)
+
+            # Compare script sources
+            scripts1 = set(s.src for s in pr1.scripts if s.src)
+            scripts2 = set(s.src for s in pr2.scripts if s.src)
+            if scripts1 or scripts2:
+                intersection = len(scripts1 & scripts2)
+                union = len(scripts1 | scripts2)
+                scores.append(intersection / union if union > 0 else 1.0)
+
+            # Compare stylesheet links
+            links1 = set(l.href for l in pr1.links)
+            links2 = set(l.href for l in pr2.links)
+            if links1 or links2:
+                intersection = len(links1 & links2)
+                union = len(links1 | links2)
+                scores.append(intersection / union if union > 0 else 1.0)
+
+            # Compare has_scripts/has_styles
+            if pr1.has_scripts == pr2.has_scripts:
+                scores.append(1.0)
+            else:
+                scores.append(0.5)
+
+        # CSS: compare selectors, properties, variables
+        elif isinstance(pr1, CSSParseResult):
+            # Compare unique selectors
+            sels1 = pr1.unique_selectors
+            sels2 = pr2.unique_selectors
+            if sels1 or sels2:
+                intersection = len(sels1 & sels2)
+                union = len(sels1 | sels2)
+                scores.append(intersection / union if union > 0 else 1.0)
+
+            # Compare unique properties used
+            props1 = pr1.unique_properties
+            props2 = pr2.unique_properties
+            if props1 or props2:
+                intersection = len(props1 & props2)
+                union = len(props1 | props2)
+                scores.append(intersection / union if union > 0 else 1.0)
+
+            # Compare CSS variables
+            vars1 = set(v.name for v in pr1.variables)
+            vars2 = set(v.name for v in pr2.variables)
+            if vars1 or vars2:
+                intersection = len(vars1 & vars2)
+                union = len(vars1 | vars2)
+                scores.append(intersection / union if union > 0 else 1.0)
+
+            # Compare media queries
+            mq1 = set(mq.query for mq in pr1.media_queries)
+            mq2 = set(mq.query for mq in pr2.media_queries)
+            if mq1 or mq2:
+                intersection = len(mq1 & mq2)
+                union = len(mq1 | mq2)
+                scores.append(intersection / union if union > 0 else 1.0)
 
         return sum(scores) / len(scores) if scores else 0.5
 

@@ -83,3 +83,28 @@ from .parser_sql import (
     SQLQuery,
     parse_sql_file,
 )
+
+from .parser_html import (
+    HTMLParser,
+    HTMLParseResult,
+    HTMLTagInfo,
+    HTMLScriptInfo,
+    HTMLStyleInfo,
+    HTMLLinkInfo,
+    HTMLFormInfo,
+    HTMLMetaInfo,
+    HTMLElementType,
+)
+
+from .parser_css import (
+    CSSParser,
+    CSSParseResult,
+    CSSSelectorInfo,
+    CSSPropertyInfo,
+    CSSMediaQueryInfo,
+    CSSKeyframeInfo,
+    CSSImportInfo,
+    CSSVariableInfo,
+    CSSFontFaceInfo,
+    CSSElementType,
+)
