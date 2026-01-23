@@ -263,6 +263,7 @@ function AppContent() {
   return (
     <Layout
       sidebar={sidebarOpen ? sidebarContent : null}
+      rightPanelOpen={ai.isOpen}
       header={
         <div className="flex items-center justify-between w-full gap-4">
           <div className="flex items-center gap-4 flex-shrink-0">

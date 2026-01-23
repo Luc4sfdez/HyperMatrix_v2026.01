@@ -5,6 +5,8 @@ export function Layout({
   header,
   children,
   className = '',
+  rightPanelOpen = false,
+  rightPanelWidth = 384, // w-96 = 384px
 }) {
   return (
     <div className="flex h-screen bg-[var(--color-bg-primary)]">
@@ -15,8 +17,11 @@ export function Layout({
         </div>
       )}
 
-      {/* Main content */}
-      <div className="flex-1 flex flex-col overflow-hidden min-w-0">
+      {/* Main content - shrinks when right panel is open */}
+      <div
+        className="flex-1 flex flex-col overflow-hidden min-w-0 transition-all duration-200"
+        style={{ marginRight: rightPanelOpen ? `${rightPanelWidth}px` : 0 }}
+      >
         {/* Header */}
         {header && (
           <header className="flex-shrink-0 bg-[var(--color-bg-primary)] border-b border-[var(--color-border)] px-6 py-3">
