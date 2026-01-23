@@ -251,3 +251,72 @@ async def clear_workspace():
         return {"success": True, "message": "Workspace cleared"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/create-folder")
+async def create_folder(name: str = Form(...)):
+    """Create a folder in workspace for uploading files."""
+    WORKSPACE_PATH.mkdir(parents=True, exist_ok=True)
+
+    # Sanitize folder name
+    safe_name = "".join(c for c in name if c.isalnum() or c in "._- ")
+    if not safe_name:
+        safe_name = "uploaded"
+
+    target_path = WORKSPACE_PATH / safe_name
+
+    # Ensure unique name
+    counter = 1
+    while target_path.exists():
+        target_path = WORKSPACE_PATH / f"{safe_name}_{counter}"
+        counter += 1
+
+    target_path.mkdir(parents=True)
+
+    return {
+        "success": True,
+        "name": target_path.name,
+        "path": str(target_path)
+    }
+
+
+@router.post("/upload-file")
+async def upload_single_file(
+    file: UploadFile = File(...),
+    path: str = Form(..., description="Relative path including folder name")
+):
+    """Upload a single file to workspace, preserving directory structure."""
+    WORKSPACE_PATH.mkdir(parents=True, exist_ok=True)
+
+    # Check space
+    current_size = get_workspace_size()
+    if current_size >= MAX_WORKSPACE_SIZE:
+        raise HTTPException(status_code=507, detail="Workspace full (20GB limit)")
+
+    # Build target path - path includes folder name like "myproject/src/file.py"
+    safe_path = path.replace("\\", "/").lstrip("/")
+    target_path = WORKSPACE_PATH / safe_path
+
+    # Ensure parent directories exist
+    target_path.parent.mkdir(parents=True, exist_ok=True)
+
+    try:
+        content = await file.read()
+
+        # Check if this upload would exceed limit
+        if current_size + len(content) > MAX_WORKSPACE_SIZE:
+            raise HTTPException(status_code=507,
+                detail=f"Upload would exceed 20GB limit")
+
+        with open(target_path, "wb") as f:
+            f.write(content)
+
+        return {
+            "success": True,
+            "path": str(target_path),
+            "size": len(content)
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))

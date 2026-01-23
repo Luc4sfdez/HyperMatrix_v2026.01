@@ -3,6 +3,7 @@ import { Card, CardHeader, CardTitle, CardContent, CardFooter } from '../compone
 import { Button } from '../components/Button'
 import ProjectSelector, { addRecentProject } from '../components/ProjectSelector'
 import FileBrowser from '../components/FileBrowser'
+import FolderUploader from '../components/FolderUploader'
 
 // Fases del escaneo
 const SCAN_PHASES = [
@@ -71,6 +72,7 @@ export default function Dashboard({ hypermatrixUrl, onNavigate }) {
   const [currentScanId, setCurrentScanId] = useState(null)
   const [scanProgress, setScanProgress] = useState(null)
   const [showFileBrowser, setShowFileBrowser] = useState(false)
+  const [showFolderUploader, setShowFolderUploader] = useState(false)
   const [existingScans, setExistingScans] = useState([])
   const pollingRef = useRef(null)
 
@@ -227,6 +229,14 @@ export default function Dashboard({ hypermatrixUrl, onNavigate }) {
                 className="mb-0"
               >
                 📁 Explorar
+              </Button>
+              <Button
+                variant="primary"
+                onClick={() => setShowFolderUploader(true)}
+                disabled={isScanning}
+                className="mb-0"
+              >
+                ⬆️ Subir Carpeta
               </Button>
             </div>
           </div>
@@ -526,6 +536,19 @@ export default function Dashboard({ hypermatrixUrl, onNavigate }) {
         title="Seleccionar Directorio del Proyecto"
         hypermatrixUrl={hypermatrixUrl}
       />
+
+      {/* Folder Uploader Modal */}
+      {showFolderUploader && (
+        <FolderUploader
+          hypermatrixUrl={hypermatrixUrl}
+          onClose={() => setShowFolderUploader(false)}
+          onUploadComplete={({ path, folderName }) => {
+            setProjectPath(path)
+            setProjectName(folderName)
+            setShowFolderUploader(false)
+          }}
+        />
+      )}
     </div>
   )
 }

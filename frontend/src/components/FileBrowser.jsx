@@ -97,7 +97,7 @@ export default function FileBrowser({
   // Quick navigation locations
   const quickLocations = [
     { path: '/projects', label: '📂 Proyectos', desc: 'Solo lectura' },
-    { path: '/workspace', label: '📁 Workspace', desc: '20GB disponibles' },
+    { path: '/workspace', label: '📁 Workspace', desc: 'Tus proyectos subidos' },
   ]
 
   const handleItemClick = (item) => {
