@@ -95,6 +95,7 @@ class ExportFormat(str, Enum):
     CSV = "csv"
     PDF = "pdf"
     MARKDOWN = "markdown"
+    HTML = "html"
 
 
 class ExportRequest(BaseModel):
