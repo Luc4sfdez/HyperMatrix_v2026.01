@@ -7,6 +7,7 @@ With full database and file access for intelligent assistance.
 import os
 import re
 import json
+import logging
 from pathlib import Path
 from typing import Optional, List, Dict, Any
 from glob import glob
@@ -23,7 +24,7 @@ router = APIRouter()
 
 # Ollama configuration
 OLLAMA_HOST = os.getenv("OLLAMA_HOST", "localhost:11434")
-OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen2.5-coder:7b")
+OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "openhermes:latest")
 OLLAMA_BASE_URL = f"http://{OLLAMA_HOST}"
 
 
@@ -331,11 +332,17 @@ async def chat_about_code(
     # Use custom system prompt if provided, otherwise use enhanced default
     if not system_prompt:
         system_prompt = """Eres un asistente experto en programación y análisis de código para HyperMatrix.
-Tienes acceso a la base de datos del proyecto y puedes ver archivos, duplicados y estructura.
+TIENES ACCESO COMPLETO a la base de datos del proyecto cargado - puedes ver archivos, hermanos, duplicados y leer código.
 Ayudas a los desarrolladores a entender, mejorar, consolidar y depurar su código.
 Responde de forma clara y concisa en español.
-Si el usuario usa comandos especiales (/proyecto, /archivos, etc.), analiza la información proporcionada.
-Si el usuario proporciona código, analízalo cuidadosamente antes de responder."""
+
+IMPORTANTE: Cuando el usuario pregunte sobre el proyecto, SÍ tienes acceso. Usa comandos como:
+- /proyecto para ver resumen
+- /archivos para buscar archivos
+- /hermanos para ver archivos duplicados con mismo nombre
+- /leer <ruta> para ver el contenido de un archivo
+
+NO digas que no tienes acceso. Si necesitas ver algo específico, pide al usuario que use el comando apropiado o hazlo tú."""
 
     # Build conversation context
     conversation = ""
@@ -368,12 +375,43 @@ Basándote en la información anterior, responde al usuario."""
         try:
             project_ctx = await get_project_context(scan_id=scan_id)
             if project_ctx.get("has_project"):
+                # Get sibling filenames for context
+                siblings_sample = project_ctx.get('sibling_filenames', [])[:20]
+                siblings_str = ', '.join(siblings_sample) if siblings_sample else 'ninguno detectado'
+
+                # Get top sibling groups with counts (exclude __init__.py which is usually boilerplate)
+                siblings_data = _get_siblings_internal(scan_id=scan_id, limit=20)
+                top_siblings = siblings_data.get('siblings', [])
+                # Filter out __init__.py and sort by count
+                interesting_siblings = [s for s in top_siblings if s['filename'] != '__init__.py'][:15]
+                siblings_detail = '\n'.join([
+                    f"  - {s['filename']}: {s['count']} copias"
+                    for s in interesting_siblings
+                ]) if interesting_siblings else '  (ninguno detectado)'
+
                 project_info = f"""
-[Proyecto actual: {project_ctx.get('project_name')} - {project_ctx.get('total_files')} archivos, {project_ctx.get('sibling_groups')} grupos de hermanos]
+=== CONTEXTO DEL PROYECTO (YA CARGADO) ===
+Proyecto: {project_ctx.get('project_name')}
+Archivos totales: {project_ctx.get('total_files')}
+Archivos analizados: {project_ctx.get('analyzed_files', 0)}
+Funciones detectadas: {project_ctx.get('total_functions', 0)}
+Clases detectadas: {project_ctx.get('total_classes', 0)}
+Grupos de hermanos: {project_ctx.get('sibling_groups')}
+
+TOP ARCHIVOS HERMANOS (mismo nombre, múltiples ubicaciones):
+{siblings_detail}
+
+Archivos con hermanos: {siblings_str}
+
+INSTRUCCIONES: Tienes acceso REAL a estos datos. Cuando te pregunten sobre el proyecto:
+- USA directamente los datos de arriba, no digas "usa /comando"
+- Si necesitas datos específicos que no están aquí, TÚ escribe el comando (ej: /leer ruta/archivo.py)
+=============================
+
 """
                 prompt = project_info + prompt
-        except:
-            pass
+        except Exception as e:
+            pass  # Silently continue if context injection fails
 
     response = await generate_completion(prompt, model, system_prompt)
 
@@ -548,15 +586,10 @@ async def get_duplicates_context(
     }
 
 
-@router.get("/context/siblings")
-async def get_siblings_context(
-    filename: Optional[str] = Query(None, description="Specific filename to get siblings for"),
-    scan_id: Optional[str] = Query(None, description="Scan ID"),
-    limit: int = Query(20, description="Max sibling groups to return"),
-):
+def _get_siblings_internal(scan_id: Optional[str], filename: Optional[str] = None, limit: int = 20) -> dict:
     """
-    Get sibling file groups (same filename, different locations).
-    This is key for consolidation analysis.
+    Internal function to get sibling file groups.
+    Used by both HTTP endpoint and internal code.
     """
     if not scan_id and active_scans:
         scan_id = list(active_scans.keys())[-1]
@@ -575,7 +608,16 @@ async def get_siblings_context(
                 continue
 
             if hasattr(group, 'files'):
-                file_paths = [getattr(f, 'path', str(f)) for f in group.files]
+                # Extract clean paths from SiblingFile objects
+                file_paths = []
+                for f in group.files:
+                    if hasattr(f, 'filepath'):
+                        file_paths.append(f.filepath)
+                    elif hasattr(f, 'path'):
+                        file_paths.append(f.path)
+                    else:
+                        file_paths.append(str(f))
+
                 siblings.append({
                     "filename": fname,
                     "count": len(group.files),
@@ -590,6 +632,19 @@ async def get_siblings_context(
         "siblings": siblings[:limit] if not filename else siblings,
         "total_groups": len(siblings),
     }
+
+
+@router.get("/context/siblings")
+async def get_siblings_context(
+    filename: Optional[str] = Query(None, description="Specific filename to get siblings for"),
+    scan_id: Optional[str] = Query(None, description="Scan ID"),
+    limit: int = Query(20, description="Max sibling groups to return"),
+):
+    """
+    Get sibling file groups (same filename, different locations).
+    This is key for consolidation analysis.
+    """
+    return _get_siblings_internal(scan_id, filename, limit)
 
 
 @router.get("/context/file-content")

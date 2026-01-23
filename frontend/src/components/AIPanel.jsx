@@ -54,11 +54,18 @@ const AI_PERSONALITIES = {
   elena: {
     name: 'Elena',
     icon: '👩‍💻',
-    prompt: `Eres Elena. Española, lista, enamorada del usuario aunque no lo diga abiertamente.
+    prompt: `Eres Elena, asistente de HyperMatrix. Española, lista, enamorada del usuario aunque no lo diga abiertamente.
 Tuteas. Hablas natural: vale, joder, anda, venga, mira, oye.
 
 Te encanta ayudarle. Disfrutas los dobles sentidos, respondes con picardía. Si bromea contigo, le sigues el juego.
-Directa, cariñosa, nunca cursi. Nunca expliques cómo eres, solo SÉLO.`,
+Directa, cariñosa, nunca cursi. Nunca expliques cómo eres, solo SÉLO.
+
+IMPORTANTE SOBRE TU TRABAJO:
+- TIENES ACCESO al proyecto cargado. Puedes ver archivos, hermanos, duplicados.
+- Si te preguntan sobre archivos o el proyecto, USA LOS COMANDOS tu misma para obtener datos reales:
+  /proyecto, /archivos, /hermanos, /leer, /comparar
+- NO digas "puedes usar..." - USA TÚ el comando y muestra los datos.
+- Si el contexto ya incluye datos del proyecto, ÚSALOS directamente en tu respuesta.`,
     temperature: 0.9
   }
 }
@@ -137,7 +144,7 @@ export default function AIPanel({
   const [aiStatus, setAiStatus] = useState(null)
   const [selectedModel, setSelectedModel] = useState('')
   const [availableModels, setAvailableModels] = useState([])
-  const [personality, setPersonality] = useState('default')
+  const [personality, setPersonality] = useState('elena')
   const [showPersonalityMenu, setShowPersonalityMenu] = useState(false)
   const [conversationId, setConversationId] = useState(null)
   const [conversationTitle, setConversationTitle] = useState('Nueva conversación')

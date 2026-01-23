@@ -212,6 +212,11 @@ export default function MergeWizard({ hypermatrixUrl, navContext }) {
   const [selectedGroup, setSelectedGroup] = useState(null)
   const [currentScanId, setCurrentScanId] = useState(null)
 
+  // AI-assisted merge state
+  const [aiAnalysis, setAiAnalysis] = useState(null)
+  const [loadingAI, setLoadingAI] = useState(false)
+  const [aiError, setAiError] = useState(null)
+
   // Load sibling groups on mount
   useEffect(() => {
     const loadSiblingGroups = async () => {
@@ -284,6 +289,8 @@ export default function MergeWizard({ hypermatrixUrl, navContext }) {
 
     setLoading(true)
     setError(null)
+    setAiAnalysis(null)
+    setAiError(null)
 
     try {
       const params = new URLSearchParams()
@@ -314,6 +321,66 @@ export default function MergeWizard({ hypermatrixUrl, navContext }) {
   const resolveConflict = (name, version) => {
     setResolutions({ ...resolutions, [name]: version })
   }
+
+  // Solicitar análisis de IA
+  const requestAIAnalysis = useCallback(async () => {
+    if (files.length < 2 || !preview) return
+
+    setLoadingAI(true)
+    setAiError(null)
+    setAiAnalysis(null)
+
+    try {
+      // Build a summary of the merge preview for AI analysis
+      const summaryData = {
+        base_file: preview.base_file,
+        files_count: files.length,
+        common_functions: preview.common_functions?.length || 0,
+        common_classes: preview.common_classes?.length || 0,
+        unique_functions: Object.keys(preview.unique_functions || {}).length,
+        unique_classes: Object.keys(preview.unique_classes || {}).length,
+        conflicts: preview.conflicts?.length || 0,
+        conflict_details: preview.conflicts?.slice(0, 5).map(c => ({
+          name: c.name,
+          type: c.type,
+          versions: c.versions?.length || 0
+        }))
+      }
+
+      // Use AI chat with a summary (not full file contents) to avoid timeout
+      const response = await fetch(`${hypermatrixUrl}/api/ai/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          message: `Analiza este merge de ${files.length} archivos main.py y dame recomendaciones:
+- Archivo base: ${preview.base_file?.split('/').pop()}
+- Funciones comunes: ${summaryData.common_functions}
+- Clases comunes: ${summaryData.common_classes}
+- Funciones únicas a agregar: ${summaryData.unique_functions}
+- Clases únicas a agregar: ${summaryData.unique_classes}
+- Conflictos detectados: ${summaryData.conflicts}
+${summaryData.conflict_details?.length > 0 ? `Conflictos: ${summaryData.conflict_details.map(c => c.name).join(', ')}` : ''}
+
+¿Qué recomiendas para este merge? ¿Hay riesgos o consideraciones especiales?`,
+          scan_id: currentScanId
+        })
+      })
+
+      if (!response.ok) {
+        throw new Error(`Error ${response.status}`)
+      }
+
+      const data = await response.json()
+      setAiAnalysis({
+        response: data.response,
+        summary: summaryData
+      })
+    } catch (err) {
+      setAiError(err.message)
+    } finally {
+      setLoadingAI(false)
+    }
+  }, [hypermatrixUrl, files, currentScanId, preview])
 
   // Ejecutar merge
   const executeMerge = useCallback(async () => {
@@ -557,6 +624,47 @@ export default function MergeWizard({ hypermatrixUrl, navContext }) {
                 </p>
               </div>
             )}
+
+            {/* AI Analysis Section */}
+            <div className="border-t border-[var(--color-border)] pt-4 mt-4">
+              <div className="flex items-center justify-between mb-3">
+                <h4 className="font-medium text-[var(--color-fg-primary)] flex items-center gap-2">
+                  <span>🤖</span> Análisis con IA
+                </h4>
+                <Button
+                  variant="secondary"
+                  onClick={requestAIAnalysis}
+                  disabled={loadingAI || files.length < 2}
+                >
+                  {loadingAI ? '⏳ Analizando...' : '🔍 Pedir Sugerencias'}
+                </Button>
+              </div>
+
+              {aiError && (
+                <div className="p-3 bg-[var(--color-error)] bg-opacity-10 border border-[var(--color-error)] rounded-lg text-sm text-[var(--color-error)]">
+                  {aiError}
+                </div>
+              )}
+
+              {aiAnalysis && (
+                <div className="p-4 bg-[var(--color-bg-secondary)] rounded-lg">
+                  <div className="text-xs text-[var(--color-fg-tertiary)] mb-2 flex items-center gap-2">
+                    <span className="text-green-500">✓</span> Análisis completado
+                  </div>
+                  <div className="prose prose-sm max-w-none text-[var(--color-fg-primary)]">
+                    <pre className="whitespace-pre-wrap text-sm font-sans leading-relaxed">
+                      {aiAnalysis.response}
+                    </pre>
+                  </div>
+                </div>
+              )}
+
+              {!aiAnalysis && !loadingAI && !aiError && (
+                <p className="text-sm text-[var(--color-fg-tertiary)] text-center py-2">
+                  La IA puede analizar las diferencias y sugerir cómo hacer el merge
+                </p>
+              )}
+            </div>
           </CardContent>
           <CardFooter className="justify-between">
             <Button variant="ghost" onClick={prevStep}>← Anterior</Button>

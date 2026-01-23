@@ -25,15 +25,20 @@ export default function FolderUploader({ hypermatrixUrl, onUploadComplete, onClo
 
     try {
       // Create folder in workspace
+      const formData = new FormData()
+      formData.append('name', folderName)
       const createRes = await fetch(`${hypermatrixUrl}/api/workspace/create-folder`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: folderName })
+        body: formData
       })
 
       if (!createRes.ok) {
-        const err = await createRes.json()
-        throw new Error(err.detail || 'Error creating folder')
+        let errMsg = 'Error creating folder'
+        try {
+          const err = await createRes.json()
+          errMsg = err.detail || errMsg
+        } catch (e) {}
+        throw new Error(errMsg)
       }
 
       const { path: basePath } = await createRes.json()
@@ -73,7 +78,7 @@ export default function FolderUploader({ hypermatrixUrl, onUploadComplete, onClo
       }
 
     } catch (err) {
-      setError(err.message)
+      setError(typeof err === 'string' ? err : (err.message || 'Error desconocido'))
     } finally {
       setUploading(false)
     }
