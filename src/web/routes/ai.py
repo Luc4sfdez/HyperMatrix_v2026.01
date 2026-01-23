@@ -24,7 +24,7 @@ router = APIRouter()
 
 # Ollama configuration
 OLLAMA_HOST = os.getenv("OLLAMA_HOST", "localhost:11434")
-OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "openhermes:latest")
+OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen2:7b")
 OLLAMA_BASE_URL = f"http://{OLLAMA_HOST}"
 
 

@@ -9,7 +9,10 @@ echo "  AI-Powered Code Analysis Dashboard"
 echo "=============================================="
 
 # Create data directories if they don't exist
-mkdir -p /app/data /app/logs /app/output /app/reports
+mkdir -p /app/data /app/logs /app/output /app/reports /app/data/workspace
+
+# Create /projects directory if possible (may fail without root)
+mkdir -p /projects 2>/dev/null || echo "[HyperMatrix] Note: /projects not created (no root permission)"
 
 # Initialize database if it doesn't exist
 if [ ! -f /app/data/hypermatrix.db ]; then
@@ -43,7 +46,7 @@ echo "  - Host: ${HYPERMATRIX_HOST:-0.0.0.0}"
 echo "  - Port: ${HYPERMATRIX_PORT:-26020}"
 echo "  - Data Dir: ${DATA_DIR:-/app/data}"
 echo "  - Ollama: ${OLLAMA_HOST:-disabled}"
-echo "  - Model: ${OLLAMA_MODEL:-qwen2.5-coder:7b}"
+echo "  - Model: ${OLLAMA_MODEL:-qwen2:7b}"
 echo ""
 
 # Execute the main command

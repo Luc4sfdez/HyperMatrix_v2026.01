@@ -34,8 +34,15 @@ async def get_sibling_groups(
     result = scan_results[scan_id]
     consolidation = result.get("consolidation")
 
+    # Return empty data if no consolidation available (not an error)
     if not consolidation or not hasattr(consolidation, "groups"):
-        raise HTTPException(status_code=400, detail="No consolidation data available")
+        return {
+            "groups": [],
+            "total": 0,
+            "limit": limit,
+            "offset": offset,
+            "message": "No sibling groups found (scan may not have detected duplicates)"
+        }
 
     groups = []
     for filename, group in consolidation.groups.items():

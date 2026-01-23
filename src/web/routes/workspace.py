@@ -11,7 +11,9 @@ import tempfile
 
 router = APIRouter(prefix="/api/workspace", tags=["workspace"])
 
-WORKSPACE_PATH = Path("/workspace")
+# Use DATA_DIR for workspace to ensure persistence and permissions
+DATA_DIR = os.getenv("DATA_DIR", "/app/data")
+WORKSPACE_PATH = Path(DATA_DIR) / "workspace"
 MAX_WORKSPACE_SIZE = 20 * 1024 * 1024 * 1024  # 20GB limit
 
 

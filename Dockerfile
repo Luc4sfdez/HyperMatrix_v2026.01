@@ -58,9 +58,9 @@ COPY --chown=hypermatrix:hypermatrix utils/ ./utils/
 # Copy built frontend from builder stage
 COPY --from=frontend-builder --chown=hypermatrix:hypermatrix /app/frontend/dist ./frontend/dist
 
-# Create data directories
-RUN mkdir -p /app/data /app/logs /app/output /app/reports && \
-    chown -R hypermatrix:hypermatrix /app
+# Create data directories and projects mount point
+RUN mkdir -p /app/data /app/logs /app/output /app/reports /projects && \
+    chown -R hypermatrix:hypermatrix /app /projects
 
 # Copy entrypoint script
 COPY --chown=hypermatrix:hypermatrix entrypoint.sh /app/
