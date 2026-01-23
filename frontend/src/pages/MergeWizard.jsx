@@ -162,7 +162,7 @@ function ConflictResolver({ conflict, resolution, onResolve }) {
             {conflict.versions.length} versiones diferentes
           </p>
         </div>
-        <span className="px-2 py-0.5 bg-[var(--color-warning)] text-white text-xs rounded">
+        <span className="px-2 py-0.5 bg-[var(--color-warning)] text-[var(--color-warning-text)] text-xs rounded font-medium">
           Conflicto
         </span>
       </div>

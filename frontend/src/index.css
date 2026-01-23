@@ -57,3 +57,49 @@
 .metric-label {
   @apply text-sm text-[#616161] uppercase tracking-wider;
 }
+
+/* ============================================
+   STATE BADGES - WCAG AA Compliant Contrast
+   ============================================ */
+
+/* Solid background badges with proper contrast text */
+.badge-error {
+  background-color: var(--color-error);
+  color: var(--color-error-text);
+}
+
+.badge-warning {
+  background-color: var(--color-warning);
+  color: var(--color-warning-text);
+}
+
+.badge-success {
+  background-color: var(--color-success);
+  color: var(--color-success-text);
+}
+
+.badge-info {
+  background-color: var(--color-info);
+  color: var(--color-info-text);
+}
+
+/* Soft/Tinted badges - colored text on light tinted bg */
+.badge-error-soft {
+  background-color: rgba(220, 38, 38, 0.1);
+  color: var(--color-error-fg);
+}
+
+.badge-warning-soft {
+  background-color: rgba(217, 119, 6, 0.1);
+  color: var(--color-warning-fg);
+}
+
+.badge-success-soft {
+  background-color: rgba(5, 150, 105, 0.1);
+  color: var(--color-success-fg);
+}
+
+.badge-info-soft {
+  background-color: rgba(37, 99, 235, 0.1);
+  color: var(--color-info-fg);
+}

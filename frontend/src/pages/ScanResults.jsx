@@ -387,7 +387,7 @@ export default function ScanResults({ hypermatrixUrl, onNavigate }) {
                             <h4 className="font-semibold text-[var(--color-fg-primary)]">
                               {filename}
                             </h4>
-                            <span className="text-xs px-2 py-1 bg-[var(--color-warning)] text-white rounded">
+                            <span className="text-xs px-2 py-1 bg-[var(--color-warning)] text-[var(--color-warning-text)] rounded font-medium">
                               {group.files?.length || 0} versiones
                             </span>
                           </div>

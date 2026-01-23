@@ -22,11 +22,23 @@
   --color-syntax-number: #098658;
   --color-syntax-function: #0066BC;
   
-  /* Estados */
-  --color-error: #E74C3C;
-  --color-warning: #F39C12;
-  --color-success: #27AE60;
-  --color-info: #3498DB;
+  /* Estados - backgrounds */
+  --color-error: #DC2626;
+  --color-warning: #D97706;
+  --color-success: #059669;
+  --color-info: #2563EB;
+
+  /* Estados - texto sobre fondo de color (contraste WCAG AA) */
+  --color-error-text: #FFFFFF;
+  --color-warning-text: #000000;
+  --color-success-text: #FFFFFF;
+  --color-info-text: #FFFFFF;
+
+  /* Estados - texto coloreado sobre fondo claro */
+  --color-error-fg: #B91C1C;
+  --color-warning-fg: #B45309;
+  --color-success-fg: #047857;
+  --color-info-fg: #1D4ED8;
   
   /* Tipografía */
   --font-family-base: -apple-system, BlinkMacOSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
@@ -78,6 +90,12 @@
   --color-syntax-string: #CE9178;
   --color-syntax-number: #B5CEA8;
   --color-syntax-function: #DCDCAA;
+
+  /* Estados - texto coloreado sobre fondo oscuro (más brillante para contraste) */
+  --color-error-fg: #F87171;
+  --color-warning-fg: #FBBF24;
+  --color-success-fg: #34D399;
+  --color-info-fg: #60A5FA;
 }
 
 /* Smooth transitions para theme switching */

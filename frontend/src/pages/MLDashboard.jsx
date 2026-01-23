@@ -34,9 +34,9 @@ function PatternCard({ pattern, rank }) {
     <div className="p-4 border border-[var(--color-border)] rounded-lg bg-[var(--color-bg-secondary)]">
       <div className="flex items-center gap-3 mb-2">
         <span className={`w-8 h-8 flex items-center justify-center rounded-full font-bold text-sm ${
-          rank === 1 ? 'bg-yellow-500 text-black' :
+          rank === 1 ? 'bg-yellow-500 text-black font-bold' :
           rank === 2 ? 'bg-gray-400 text-black' :
-          rank === 3 ? 'bg-orange-600 text-white' :
+          rank === 3 ? 'bg-amber-600 text-black font-bold' :
           'bg-[var(--color-bg-tertiary)] text-[var(--color-fg-secondary)]'
         }`}>
           #{rank}
