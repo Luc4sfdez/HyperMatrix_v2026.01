@@ -35,11 +35,13 @@ function AppContent() {
   const [isConnected, setIsConnected] = useState(false)
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [currentScanId, setCurrentScanId] = useState(null) // ID del escaneo actual para contexto de IA
+  const [currentScanInfo, setCurrentScanInfo] = useState(null) // Info completa del scan actual
+  const [currentProjectName, setCurrentProjectName] = useState(null) // Nombre del proyecto actual
 
   // Hook del panel de IA
   const ai = useAI()
 
-  // Cargar el scan más reciente para contexto de IA
+  // Cargar el scan más reciente para contexto de IA y breadcrumbs
   useEffect(() => {
     const loadCurrentScan = async () => {
       try {
@@ -51,6 +53,14 @@ function AppContent() {
             const completedScan = data.scans.find(s => s.status === 'completed') || data.scans[0]
             if (completedScan) {
               setCurrentScanId(completedScan.scan_id)
+              setCurrentScanInfo({
+                status: completedScan.status,
+                total_files: completedScan.total_files,
+                project_path: completedScan.root_path
+              })
+              // Extract project name from path
+              const pathParts = (completedScan.root_path || '').split(/[/\\]/)
+              setCurrentProjectName(pathParts[pathParts.length - 1] || 'Proyecto')
             }
           }
         }
@@ -305,6 +315,8 @@ function AppContent() {
             <Breadcrumbs
               items={generateBreadcrumbs(currentPage, navContext)}
               onNavigate={handleNavigate}
+              projectName={currentProjectName}
+              scanInfo={currentScanInfo}
             />
           </div>
         )}
