@@ -154,10 +154,12 @@ def create_web_app(
         app.mount("/assets", StaticFiles(directory=str(frontend_dist / "assets")), name="frontend-assets")
 
     # Import and include routers
-    from .routes import scan, consolidation, export, batch, rules, analysis, clones, advanced, ai, browse, workspace, search
+    from .routes import scan, consolidation, export, batch, rules, analysis, clones, advanced, ai, browse, workspace, search, summary, docs
     app.include_router(browse.router)  # Has its own prefix /api/browse
     app.include_router(workspace.router)  # Has its own prefix /api/workspace
     app.include_router(search.router)  # Has its own prefix /api/search
+    app.include_router(summary.router)  # Has its own prefix /api/summary
+    app.include_router(docs.router)  # Has its own prefix /api/docs
     app.include_router(scan.router, prefix="/api/scan", tags=["Scan"])
     app.include_router(consolidation.router, prefix="/api/consolidation", tags=["Consolidation"])
     app.include_router(export.router, prefix="/api/export", tags=["Export"])
