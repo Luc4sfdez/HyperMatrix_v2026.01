@@ -1,0 +1,16 @@
+# HyperMatrix v2026 - Embeddings Dependencies (Optional)
+# Install with: pip install -r requirements-embeddings.txt
+#
+# Note: These add ~2GB to the Docker image for semantic search capability.
+# The main application works without these - semantic search will be disabled.
+
+# Vector embeddings
+sentence-transformers>=2.2.2
+
+# Vector database
+chromadb>=0.4.22
+
+# PyTorch (CPU version, smaller than GPU version)
+# sentence-transformers requires torch, this ensures CPU-only version
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch>=2.0.0
