@@ -4,10 +4,38 @@ Shared dependencies for API routes.
 """
 
 import os
+from pathlib import Path
 from ..core.db_manager import DBManager
 
-# Database path - use DATA_DIR env var for persistence in Docker volume
-DATA_DIR = os.getenv("DATA_DIR", "/app/data")
+
+def _get_data_dir() -> str:
+    """
+    Get data directory path, with fallback for local development.
+
+    Priority:
+    1. DATA_DIR environment variable
+    2. /app/data if it exists (Docker)
+    3. ./data in current directory (local development)
+    """
+    # Check environment variable first
+    env_data_dir = os.getenv("DATA_DIR")
+    if env_data_dir:
+        Path(env_data_dir).mkdir(parents=True, exist_ok=True)
+        return env_data_dir
+
+    # Check if Docker path exists
+    docker_path = Path("/app/data")
+    if docker_path.exists():
+        return str(docker_path)
+
+    # Fallback to local ./data directory
+    local_path = Path("./data")
+    local_path.mkdir(parents=True, exist_ok=True)
+    return str(local_path)
+
+
+# Database path - works in both Docker and local environments
+DATA_DIR = _get_data_dir()
 DEFAULT_DB_PATH = os.path.join(DATA_DIR, "hypermatrix.db")
 
 # Global database manager

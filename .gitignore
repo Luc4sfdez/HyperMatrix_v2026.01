@@ -38,3 +38,7 @@ Thumbs.db
 *.temp
 node_modules/
 test-*.js
+
+# Local development
+data/
+test-results/
