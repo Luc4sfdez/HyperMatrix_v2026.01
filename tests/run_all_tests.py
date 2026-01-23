@@ -209,7 +209,34 @@ def main():
             print(f"  {YELLOW}[WARN]{RESET} e2e_test.js not found")
 
     # ================================================
-    # 3. PYTEST UNIT TESTS
+    # 3. ADVANCED TESTS (Security, Edge Cases)
+    # ================================================
+    print_section("ADVANCED TESTS")
+
+    if args.skip_pytest:  # Reuse flag for now
+        print_result("Advanced Tests", 0, 0, skipped=True)
+    else:
+        advanced_script = script_dir / "advanced_test.py"
+        if advanced_script.exists():
+            cmd = [sys.executable, str(advanced_script), "--url", args.url]
+            success, output = run_command(cmd, cwd=str(project_root), timeout=60)
+
+            # Parse results from output
+            passed = output.count("[PASS]")
+            failed = output.count("[FAIL]")
+
+            if args.verbose:
+                print(output)
+
+            print_result("Advanced Tests", passed, failed)
+            results.append(("Advanced", passed, failed))
+            total_passed += passed
+            total_failed += failed
+        else:
+            print(f"  {YELLOW}[WARN]{RESET} advanced_test.py not found")
+
+    # ================================================
+    # 4. PYTEST UNIT TESTS
     # ================================================
     print_section("PYTEST UNIT TESTS")
 
