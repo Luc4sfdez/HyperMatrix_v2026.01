@@ -118,12 +118,12 @@ function AppContent() {
 
   const sidebarContent = (
     <Sidebar width="280px">
-      <div className="p-6 border-b border-[var(--color-border)]">
+      <div className="px-6 py-3 border-b border-[var(--color-border)] flex items-center min-h-[52px]">
         <div className="flex items-center gap-3">
           <span className="text-2xl">🔍</span>
           <div>
-            <h1 className="font-bold text-[var(--color-fg-primary)]">HyperMatrix</h1>
-            <p className="text-xs text-[var(--color-fg-secondary)]">Code Analysis</p>
+            <h1 className="font-bold text-[var(--color-fg-primary)] leading-tight">HyperMatrix</h1>
+            <p className="text-xs text-[var(--color-fg-secondary)] leading-tight">Code Analysis</p>
           </div>
         </div>
       </div>

@@ -24,7 +24,7 @@ export function Layout({
       >
         {/* Header */}
         {header && (
-          <header className="flex-shrink-0 bg-[var(--color-bg-primary)] border-b border-[var(--color-border)] px-6 py-3">
+          <header className="flex-shrink-0 bg-[var(--color-bg-primary)] border-b border-[var(--color-border)] px-6 py-3 min-h-[52px] flex items-center">
             {header}
           </header>
         )}
