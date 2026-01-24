@@ -20,6 +20,9 @@ import httpx
 from .. import app as web_app
 from ..app import active_scans, scan_results
 
+# Import context builder for SQLite + ChromaDB queries
+from ...core.context_builder import build_ai_context, get_context_builder
+
 router = APIRouter()
 
 # Ollama configuration
@@ -308,11 +311,17 @@ async def chat_about_code(
     model: Optional[str] = Body(None, description="Model to use"),
     system_prompt: Optional[str] = Body(None, description="Custom system prompt for personality"),
     scan_id: Optional[str] = Body(None, description="Current scan ID for context"),
+    project_id: Optional[int] = Body(None, description="Project ID for database context"),
+    use_context_builder: bool = Body(True, description="Whether to query SQLite+ChromaDB for context"),
 ):
     """
     Chat about code with AI assistant.
-    Supports custom personality via system_prompt parameter.
-    Supports special commands starting with / for database and file access.
+    Now with automatic SQLite + ChromaDB context building!
+
+    The AI can now answer questions like:
+    - "Where is function X?" -> Shows exact file and line number
+    - "What depends on Y?" -> Lists files that import/use Y
+    - "If I delete Z, what breaks?" -> Shows dependent files
 
     Special commands:
     - /proyecto - Get project summary
@@ -329,20 +338,44 @@ async def chat_about_code(
     # Process special commands
     command_result = await process_special_command(message)
 
+    # Build rich context from SQLite + ChromaDB
+    db_context = ""
+    if use_context_builder and not command_result:
+        try:
+            # Try to get project_id from scan_id if not provided
+            effective_project_id = project_id
+            if not effective_project_id and scan_id:
+                try:
+                    effective_project_id = int(scan_id)
+                except ValueError:
+                    pass
+
+            db_context = build_ai_context(message, project_id=effective_project_id)
+        except Exception as e:
+            db_context = f"[Error building context: {str(e)}]\n"
+
     # Use custom system prompt if provided, otherwise use enhanced default
     if not system_prompt:
         system_prompt = """Eres un asistente experto en programación y análisis de código para HyperMatrix.
-TIENES ACCESO COMPLETO a la base de datos del proyecto cargado - puedes ver archivos, hermanos, duplicados y leer código.
-Ayudas a los desarrolladores a entender, mejorar, consolidar y depurar su código.
+TIENES ACCESO COMPLETO a la base de datos SQLite y ChromaDB del proyecto.
+
+CAPACIDADES:
+- Ver TODAS las funciones con su archivo y línea exacta
+- Ver TODAS las clases con su herencia y ubicación
+- Ver TODOS los imports y dependencias entre archivos
+- Búsqueda semántica de código similar
+
+CÓMO RESPONDER:
+- Si preguntan "¿dónde está la función X?": Da el archivo y línea EXACTA
+- Si preguntan "¿qué se rompe si borro X?": Lista los archivos que dependen de X
+- Si preguntan "¿qué hace X?": Explica basándote en el código real
+
 Responde de forma clara y concisa en español.
+SIEMPRE incluye rutas de archivo y números de línea cuando sea relevante.
 
-IMPORTANTE: Cuando el usuario pregunte sobre el proyecto, SÍ tienes acceso. Usa comandos como:
-- /proyecto para ver resumen
-- /archivos para buscar archivos
-- /hermanos para ver archivos duplicados con mismo nombre
+Comandos especiales disponibles:
 - /leer <ruta> para ver el contenido de un archivo
-
-NO digas que no tienes acceso. Si necesitas ver algo específico, pide al usuario que use el comando apropiado o hazlo tú."""
+- /comparar <ruta1> <ruta2> para comparar dos archivos"""
 
     # Build conversation context
     conversation = ""
@@ -360,6 +393,12 @@ NO digas que no tienes acceso. Si necesitas ver algo específico, pide al usuari
 Basándote en la información anterior, responde al usuario."""
     else:
         prompt = f"{conversation}Usuario: {message}"
+
+    # Add SQLite + ChromaDB context if available
+    if db_context:
+        prompt = f"""{db_context}
+
+{prompt}"""
 
     # Add code context if provided
     if context:
@@ -418,12 +457,22 @@ INSTRUCCIONES: Tienes acceso REAL a estos datos. Cuando te pregunten sobre el pr
     result = {
         "response": response,
         "model_used": model or OLLAMA_MODEL,
+        "context_used": bool(db_context),
     }
 
     # Include command data if a special command was processed
     if command_result:
         result["command"] = command_result.get("command")
         result["command_data"] = command_result.get("data")
+
+    # Include context info for debugging/transparency
+    if db_context:
+        # Count what was found in context
+        result["context_info"] = {
+            "sqlite_queried": True,
+            "chromadb_queried": True,
+            "keywords_extracted": len(db_context.split("FUNCIONES ENCONTRADAS:")) > 1,
+        }
 
     return result
 
