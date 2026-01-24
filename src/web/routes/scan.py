@@ -83,12 +83,17 @@ async def run_scan(scan_id: str, request: ScanRequest):
         # Store results
         scan_results[scan_id] = {
             "project_name": project_name,
+            "root_path": str(path),  # Required for metrics and docs endpoints
             "total_files": progress.total_files,
             "analyzed_files": progress.processed_files,
             "duplicate_groups": dedup_result.total_duplicate_count if dedup_result else 0,
             "sibling_groups": consolidation_result.sibling_groups if consolidation_result else 0,
             "consolidation": consolidation_result,
             "analysis": analysis_result,
+            "discovery": {
+                "root_path": str(path),
+                "files": [{"filepath": f.filepath, "path": f.filepath} for f in discovery_result.files[:1000]],
+            },
         }
 
         progress.status = ScanStatus.COMPLETED

@@ -41,17 +41,23 @@ export default function FolderUploader({ hypermatrixUrl, onUploadComplete, onClo
         throw new Error(errMsg)
       }
 
-      const { path: basePath } = await createRes.json()
+      const { path: basePath, name: actualFolderName } = await createRes.json()
 
       // Upload files one by one
+      // IMPORTANT: Use actualFolderName from server (may have _1 suffix if folder existed)
       let uploaded = 0
       for (const file of files) {
-        const relativePath = file.webkitRelativePath
-        setProgress({ current: uploaded, total: files.length, currentFile: relativePath })
+        const originalPath = file.webkitRelativePath
+        // Replace original folder name with actual folder name from server
+        const pathParts = originalPath.split('/')
+        pathParts[0] = actualFolderName  // Use server's folder name
+        const uploadPath = pathParts.join('/')
+
+        setProgress({ current: uploaded, total: files.length, currentFile: originalPath })
 
         const formData = new FormData()
         formData.append('file', file)
-        formData.append('path', relativePath)
+        formData.append('path', uploadPath)
 
         const uploadRes = await fetch(`${hypermatrixUrl}/api/workspace/upload-file`, {
           method: 'POST',
@@ -59,11 +65,11 @@ export default function FolderUploader({ hypermatrixUrl, onUploadComplete, onClo
         })
 
         if (!uploadRes.ok) {
-          console.warn(`Failed to upload ${relativePath}`)
+          console.warn(`Failed to upload ${originalPath}`)
         }
 
         uploaded++
-        setProgress({ current: uploaded, total: files.length, currentFile: relativePath })
+        setProgress({ current: uploaded, total: files.length, currentFile: originalPath })
       }
 
       setResult({

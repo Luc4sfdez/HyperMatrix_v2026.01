@@ -6,13 +6,13 @@
   --color-primary-dark: #005A9E;
   --color-accent: #007ACC;
   
-  /* Grises - Light Mode */
+  /* Grises - Light Mode - WCAG AA Compliant */
   --color-bg-primary: #FFFFFF;
   --color-bg-secondary: #F5F5F5;
   --color-bg-tertiary: #EFEFEF;
-  --color-fg-primary: #1E1E1E;
-  --color-fg-secondary: #616161;
-  --color-fg-tertiary: #A0A0A0;
+  --color-fg-primary: #1A1A1A;
+  --color-fg-secondary: #4A4A4A;  /* Darker for better contrast (was #616161) */
+  --color-fg-tertiary: #6B6B6B;   /* Darker for better contrast (was #A0A0A0) */
   --color-border: #E0E0E0;
   
   /* Sintaxis - Light */

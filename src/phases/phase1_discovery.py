@@ -74,7 +74,8 @@ class Phase1Discovery:
         ".sh", ".bash", ".zsh",
         ".sql", ".graphql",
         ".xml", ".toml", ".ini", ".cfg",
-        ".txt", ".rst",
+        ".txt", ".rst", ".log",
+        ".pdf",  # PDF files (for embedding/documentation)
     }
 
     ARCHIVE_EXTENSIONS = {".zip", ".tar", ".tar.gz", ".tgz", ".tar.bz2"}

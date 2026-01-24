@@ -45,8 +45,17 @@ WORKDIR /app
 
 # Copy requirements and install Python dependencies
 COPY requirements.txt .
+COPY requirements-embeddings.txt .
 RUN pip install --no-cache-dir -r requirements.txt && \
     pip install --no-cache-dir httpx aiofiles
+
+# Install ML dependencies for semantic search (adds ~2GB)
+# Using CPU-only torch to keep image smaller
+RUN pip install --no-cache-dir \
+    --extra-index-url https://download.pytorch.org/whl/cpu \
+    torch>=2.0.0 \
+    sentence-transformers>=2.2.2 \
+    chromadb>=0.4.22
 
 # Copy application code
 COPY --chown=hypermatrix:hypermatrix src/ ./src/

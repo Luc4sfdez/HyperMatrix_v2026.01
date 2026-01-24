@@ -35,6 +35,24 @@ from ..parsers import (
 )
 from ..core.db_manager import DBManager
 
+# Embedding engine for semantic search (lazy loaded)
+_embedding_engine = None
+
+def get_embedding_engine():
+    """Get the embedding engine (lazy initialization)."""
+    global _embedding_engine
+    if _embedding_engine is None:
+        try:
+            from ..embeddings import get_embedding_engine as _get_engine
+            _embedding_engine = _get_engine()
+        except ImportError as e:
+            logger.warning(f"Embeddings not available: {e}")
+            _embedding_engine = None
+        except Exception as e:
+            logger.warning(f"Failed to initialize embedding engine: {e}")
+            _embedding_engine = None
+    return _embedding_engine
+
 # Configure logging
 logger = logging.getLogger(__name__)
 
@@ -123,6 +141,10 @@ class Phase2Analysis:
         ".less": "css",
         ".yaml": "yaml",
         ".yml": "yaml",
+        ".txt": "text",
+        ".rst": "text",
+        ".log": "text",
+        ".pdf": "pdf",
     }
 
     def __init__(
@@ -130,10 +152,12 @@ class Phase2Analysis:
         db_manager: Optional[DBManager] = None,
         skip_duplicates: bool = True,
         extract_dna: bool = True,
+        index_embeddings: bool = True,
     ):
         self.db_manager = db_manager
         self.skip_duplicates = skip_duplicates
         self.extract_dna_flag = extract_dna
+        self.index_embeddings = index_embeddings
 
         # Initialize parsers
         self.python_parser = PythonParser()
@@ -146,8 +170,9 @@ class Phase2Analysis:
         self.result = Phase2Result()
         self._dedup_result: Optional[DeduplicationResult] = None
         self._project_id: Optional[int] = None
+        self._indexed_count = 0  # Track embedding indexing
 
-        logger.info("Phase2Analysis initialized")
+        logger.info("Phase2Analysis initialized (embeddings=%s)", index_embeddings)
 
     def analyze_all_files(
         self,
@@ -217,6 +242,7 @@ class Phase2Analysis:
 
         logger.info(f"Analysis complete: {self.result.analyzed_files} succeeded, "
                    f"{self.result.failed_files} failed, "
+                   f"{self._indexed_count} indexed to embeddings, "
                    f"{self.result.analysis_duration:.2f}s")
 
         return self.result
@@ -298,6 +324,16 @@ class Phase2Analysis:
                 result.parse_result = None
                 logger.debug(f"Scanned YAML: {file_meta.filename}")
 
+            elif file_type == "text":
+                # Text files (txt, rst, log) - read content for embedding
+                result.parse_result = None
+                logger.debug(f"Scanned text: {file_meta.filename}")
+
+            elif file_type == "pdf":
+                # PDF files - extract text for embedding
+                result.parse_result = None
+                logger.debug(f"Scanned PDF: {file_meta.filename}")
+
             else:
                 result.success = False
                 result.error = f"Unsupported file type: {file_type}"
@@ -310,6 +346,10 @@ class Phase2Analysis:
             # Populate database
             if self.db_manager and result.success:
                 self.populate_db(file_meta, result)
+
+            # Index to embedding engine for semantic search
+            if self.index_embeddings and result.success:
+                self._index_to_embeddings(file_meta, result)
 
             result.analysis_time = (datetime.now() - start_time).total_seconds()
 
@@ -499,6 +539,230 @@ class Phase2Analysis:
         except Exception as e:
             logger.error(f"Failed to save to database: {file_meta.filepath}: {e}")
 
+    def _index_to_embeddings(self, file_meta: FileMetadata, analysis_result: AnalysisResult):
+        """
+        Index file content to embedding engine for semantic search.
+
+        Indexes:
+        - Full file content
+        - Individual functions (for code files)
+        - Individual classes (for code files)
+        - Headings/sections (for markdown)
+
+        Args:
+            file_meta: File metadata from discovery
+            analysis_result: Result from analysis
+        """
+        engine = get_embedding_engine()
+        if not engine or not engine.is_available:
+            return
+
+        try:
+            # Read file content
+            content = self._read_file_content(file_meta.filepath)
+            if not content:
+                return
+
+            # Prepare metadata
+            base_metadata = {
+                "filename": file_meta.filename,
+                "extension": file_meta.extension,
+                "file_type": analysis_result.file_type,
+                "size": file_meta.size,
+            }
+
+            # Index full file
+            if engine.index_file(file_meta.filepath, content, base_metadata):
+                self._indexed_count += 1
+                logger.debug(f"Indexed file: {file_meta.filename}")
+
+            # Index individual code elements for more granular search
+            pr = analysis_result.parse_result
+
+            if isinstance(pr, ParseResult):
+                # Index Python functions
+                for func in pr.functions:
+                    func_content = self._extract_function_content(content, func)
+                    if func_content:
+                        element_id = f"{file_meta.filepath}:function:{func.name}"
+                        # Build metadata safely
+                        func_meta = {"has_docstring": bool(getattr(func, 'docstring', None))}
+                        if hasattr(func, 'params') and func.params:
+                            func_meta["params"] = [getattr(p, 'name', str(p)) for p in func.params]
+                        if hasattr(func, 'decorators'):
+                            func_meta["decorators"] = func.decorators
+                        engine.index_code_element(
+                            element_id=element_id,
+                            element_type="function",
+                            name=func.name,
+                            content=func_content,
+                            file_path=file_meta.filepath,
+                            lineno=func.lineno,
+                            metadata=func_meta
+                        )
+
+                # Index Python classes
+                for cls in pr.classes:
+                    cls_content = self._extract_class_content(content, cls)
+                    if cls_content:
+                        element_id = f"{file_meta.filepath}:class:{cls.name}"
+                        # Build metadata safely
+                        cls_meta = {"has_docstring": bool(getattr(cls, 'docstring', None))}
+                        if hasattr(cls, 'bases'):
+                            cls_meta["bases"] = cls.bases
+                        if hasattr(cls, 'methods'):
+                            cls_meta["method_count"] = len(cls.methods)
+                        engine.index_code_element(
+                            element_id=element_id,
+                            element_type="class",
+                            name=cls.name,
+                            content=cls_content,
+                            file_path=file_meta.filepath,
+                            lineno=cls.lineno,
+                            metadata=cls_meta
+                        )
+
+            elif isinstance(pr, JSParseResult):
+                # Index JavaScript functions
+                for func in pr.functions:
+                    func_content = self._extract_function_content(content, func)
+                    if func_content:
+                        element_id = f"{file_meta.filepath}:function:{func.name}"
+                        # Build metadata safely
+                        func_meta = {}
+                        if hasattr(func, 'is_async'):
+                            func_meta["is_async"] = func.is_async
+                        if hasattr(func, 'is_arrow'):
+                            func_meta["is_arrow"] = func.is_arrow
+                        engine.index_code_element(
+                            element_id=element_id,
+                            element_type="function",
+                            name=func.name,
+                            content=func_content,
+                            file_path=file_meta.filepath,
+                            lineno=func.lineno,
+                            metadata=func_meta
+                        )
+
+            elif isinstance(pr, MDParseResult):
+                # Index Markdown sections by heading
+                for heading in pr.headings:
+                    section_content = self._extract_section_content(content, heading, pr.headings)
+                    if section_content and len(section_content) > 50:
+                        element_id = f"{file_meta.filepath}:section:{heading.text[:50]}"
+                        engine.index_code_element(
+                            element_id=element_id,
+                            element_type="section",
+                            name=heading.text,
+                            content=section_content,
+                            file_path=file_meta.filepath,
+                            lineno=heading.lineno,
+                            metadata={
+                                "level": heading.level,
+                            }
+                        )
+
+        except Exception as e:
+            logger.warning(f"Failed to index {file_meta.filepath} to embeddings: {e}")
+
+    def _read_file_content(self, filepath: str, max_size: int = 500000) -> Optional[str]:
+        """Read file content for embedding, with size limit."""
+        try:
+            path = Path(filepath)
+            file_size = path.stat().st_size
+            if file_size > max_size:
+                logger.debug(f"File too large for embedding: {filepath}")
+                return None
+
+            # Handle PDF files specially
+            if path.suffix.lower() == '.pdf':
+                return self._extract_pdf_text(filepath)
+
+            # Regular text files
+            with open(filepath, 'r', encoding='utf-8', errors='replace') as f:
+                return f.read()
+        except Exception as e:
+            logger.debug(f"Could not read file for embedding: {filepath}: {e}")
+            return None
+
+    def _extract_pdf_text(self, filepath: str) -> Optional[str]:
+        """Extract text content from a PDF file."""
+        try:
+            # Try PyMuPDF (fitz) first - faster and more reliable
+            try:
+                import fitz  # PyMuPDF
+                doc = fitz.open(filepath)
+                text_parts = []
+                for page_num in range(min(doc.page_count, 50)):  # Limit to 50 pages
+                    page = doc[page_num]
+                    text_parts.append(page.get_text())
+                doc.close()
+                text = "\n".join(text_parts)
+                logger.debug(f"Extracted {len(text)} chars from PDF using PyMuPDF: {filepath}")
+                return text[:50000] if text else None  # Limit to 50k chars
+            except ImportError:
+                pass
+
+            # Fallback to pypdf
+            try:
+                from pypdf import PdfReader
+                reader = PdfReader(filepath)
+                text_parts = []
+                for page_num, page in enumerate(reader.pages[:50]):  # Limit to 50 pages
+                    text_parts.append(page.extract_text() or "")
+                text = "\n".join(text_parts)
+                logger.debug(f"Extracted {len(text)} chars from PDF using pypdf: {filepath}")
+                return text[:50000] if text else None
+            except ImportError:
+                logger.debug("No PDF library available (install PyMuPDF or pypdf)")
+                return None
+
+        except Exception as e:
+            logger.debug(f"Could not extract PDF text from {filepath}: {e}")
+            return None
+
+    def _extract_function_content(self, content: str, func) -> Optional[str]:
+        """Extract function source code from file content."""
+        try:
+            lines = content.split('\n')
+            start = func.lineno - 1
+            end = getattr(func, 'end_lineno', start + 20)
+            if end is None:
+                end = min(start + 50, len(lines))
+            return '\n'.join(lines[start:end])
+        except Exception:
+            return None
+
+    def _extract_class_content(self, content: str, cls) -> Optional[str]:
+        """Extract class source code from file content."""
+        try:
+            lines = content.split('\n')
+            start = cls.lineno - 1
+            end = getattr(cls, 'end_lineno', start + 50)
+            if end is None:
+                end = min(start + 100, len(lines))
+            return '\n'.join(lines[start:end])
+        except Exception:
+            return None
+
+    def _extract_section_content(self, content: str, heading, all_headings) -> Optional[str]:
+        """Extract markdown section content (from heading to next heading of same or higher level)."""
+        try:
+            lines = content.split('\n')
+            start = heading.lineno - 1
+
+            # Find next heading of same or higher level
+            end = len(lines)
+            for h in all_headings:
+                if h.lineno > heading.lineno and h.level <= heading.level:
+                    end = h.lineno - 1
+                    break
+
+            section = '\n'.join(lines[start:end])
+            return section[:5000]  # Limit section size
+        except Exception:
+            return None
+
     def _update_totals(self, result: AnalysisResult):
         """Update running totals from analysis result."""
         pr = result.parse_result
@@ -527,6 +791,7 @@ class Phase2Analysis:
             "total_classes": self.result.total_classes,
             "total_imports": self.result.total_imports,
             "dna_profiles": len(self.result.dna_profiles),
+            "indexed_to_embeddings": self._indexed_count,
             "errors": len(self.result.errors),
             "analysis_duration_seconds": round(self.result.analysis_duration, 2),
         }
