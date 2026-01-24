@@ -24,6 +24,7 @@ import Webhooks from './pages/Webhooks'
 import MLDashboard from './pages/MLDashboard'
 import Settings from './pages/Settings'
 import Management from './pages/Management'
+import Context from './pages/Context'
 import './styles/variables.css'
 import './styles/globals.css'
 
@@ -123,6 +124,7 @@ function AppContent() {
       case 'ml': return <MLDashboard {...commonProps} />
       case 'rules': return <Rules {...commonProps} />
       case 'management': return <Management {...commonProps} />
+      case 'context': return <Context {...commonProps} />
       case 'settings': return <Settings {...commonProps} setHypermatrixUrl={setHypermatrixUrl} />
       default: return <Dashboard {...commonProps} />
     }
@@ -239,6 +241,13 @@ function AppContent() {
             onClick={() => setCurrentPage('ml')}
           >
             🧠 Dashboard ML
+          </SidebarNavItem>
+          <SidebarNavItem
+            href="#"
+            active={currentPage === 'context'}
+            onClick={() => setCurrentPage('context')}
+          >
+            📎 Contexto
           </SidebarNavItem>
         </SidebarNavGroup>
 
