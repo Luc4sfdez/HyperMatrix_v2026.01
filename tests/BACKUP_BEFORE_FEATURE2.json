@@ -1,0 +1,28 @@
+{
+  "backup_date": "2026-01-24T09:54:40",
+  "description": "Estado antes de implementar Feature 2 (Gestión Workspace/Análisis)",
+  "scan_list": {
+    "scans": [
+      {"scan_id": "6", "project": "20251113_EXPEDIENTES_RENOVACIONTARJETAS", "files": 17},
+      {"scan_id": "5", "project": "TestUpload_1", "files": 1},
+      {"scan_id": "4", "project": "TestUpload", "files": 3},
+      {"scan_id": "3", "project": "EXPEDIENTES_CORRECTO", "files": 17},
+      {"scan_id": "2", "project": "20251113_EXPEDIENTES_RENOVACIONTARJETAS", "files": 0},
+      {"scan_id": "1", "project": "TestEmbeddings", "files": 81}
+    ],
+    "total_scans": 6
+  },
+  "search_status": {
+    "document_count": 525,
+    "model": "all-MiniLM-L6-v2",
+    "available": true
+  },
+  "db_stats": {
+    "total_projects": 6,
+    "total_files": 119,
+    "total_functions": 79,
+    "total_classes": 2,
+    "total_variables": 1359,
+    "total_imports": 194
+  }
+}

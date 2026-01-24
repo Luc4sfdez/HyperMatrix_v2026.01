@@ -23,6 +23,7 @@ import ImpactAnalysis from './pages/ImpactAnalysis'
 import Webhooks from './pages/Webhooks'
 import MLDashboard from './pages/MLDashboard'
 import Settings from './pages/Settings'
+import Management from './pages/Management'
 import './styles/variables.css'
 import './styles/globals.css'
 
@@ -121,6 +122,7 @@ function AppContent() {
       case 'webhooks': return <Webhooks {...commonProps} />
       case 'ml': return <MLDashboard {...commonProps} />
       case 'rules': return <Rules {...commonProps} />
+      case 'management': return <Management {...commonProps} />
       case 'settings': return <Settings {...commonProps} setHypermatrixUrl={setHypermatrixUrl} />
       default: return <Dashboard {...commonProps} />
     }
@@ -247,6 +249,13 @@ function AppContent() {
             onClick={() => setCurrentPage('rules')}
           >
             📋 Reglas
+          </SidebarNavItem>
+          <SidebarNavItem
+            href="#"
+            active={currentPage === 'management'}
+            onClick={() => setCurrentPage('management')}
+          >
+            🗂️ Gestión
           </SidebarNavItem>
           <SidebarNavItem
             href="#"
