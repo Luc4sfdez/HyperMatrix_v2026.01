@@ -78,7 +78,7 @@ async def generate_completion(
         payload["system"] = system
 
     try:
-        async with httpx.AsyncClient(timeout=120.0) as client:
+        async with httpx.AsyncClient(timeout=httpx.Timeout(120.0, read=120.0)) as client:
             response = await client.post(
                 f"{OLLAMA_BASE_URL}/api/generate",
                 json=payload
