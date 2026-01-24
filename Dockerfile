@@ -63,6 +63,7 @@ COPY --chown=hypermatrix:hypermatrix main.py config.py run_web.py ./
 COPY --chown=hypermatrix:hypermatrix docs/ ./docs/
 COPY --chown=hypermatrix:hypermatrix tools/ ./tools/
 COPY --chown=hypermatrix:hypermatrix utils/ ./utils/
+COPY --chown=hypermatrix:hypermatrix config/ ./config/
 
 # Copy built frontend from builder stage
 COPY --from=frontend-builder --chown=hypermatrix:hypermatrix /app/frontend/dist ./frontend/dist

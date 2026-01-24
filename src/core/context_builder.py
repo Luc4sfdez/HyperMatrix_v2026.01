@@ -17,6 +17,54 @@ from pathlib import Path
 DATA_DIR = os.getenv("DATA_DIR", "/app/data")
 DB_PATH = os.path.join(DATA_DIR, "hypermatrix.db")
 
+# Knowledge Base paths (check multiple locations)
+# In Docker: /app/data/knowledge/ or /app/config/knowledge/
+# Locally: config/knowledge/
+KB_PATHS = [
+    os.path.join(DATA_DIR, "knowledge", "hypermatrix_kb.md"),  # Docker data dir
+    os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "config", "knowledge", "hypermatrix_kb.md"),  # Project config dir
+]
+
+# Cached Knowledge Base (loaded once at module import)
+_KNOWLEDGE_BASE_CACHE: Optional[str] = None
+
+
+def _load_knowledge_base() -> str:
+    """
+    Load the HyperMatrix knowledge base from file.
+    Cached at module level to avoid repeated file reads.
+    Checks multiple paths for flexibility in deployment.
+    """
+    global _KNOWLEDGE_BASE_CACHE
+
+    if _KNOWLEDGE_BASE_CACHE is not None:
+        return _KNOWLEDGE_BASE_CACHE
+
+    try:
+        # Try each path in order
+        for kb_path in KB_PATHS:
+            if os.path.exists(kb_path):
+                with open(kb_path, 'r', encoding='utf-8') as f:
+                    _KNOWLEDGE_BASE_CACHE = f.read()
+                break
+        else:
+            # Fallback minimal knowledge base if file not found
+            _KNOWLEDGE_BASE_CACHE = """
+Eres el asistente de HyperMatrix, una herramienta de análisis de código.
+Guía al usuario con instrucciones específicas sobre pestañas y comandos.
+Pestañas principales: Dashboard, Resultados, Comparador, Explorador BD, Código Muerto.
+Comandos: /proyecto, /archivos, /funciones, /duplicados, /hermanos, /impacto.
+"""
+    except Exception as e:
+        _KNOWLEDGE_BASE_CACHE = f"[Error loading knowledge base: {e}]"
+
+    return _KNOWLEDGE_BASE_CACHE
+
+
+def get_knowledge_base() -> str:
+    """Get the cached knowledge base content."""
+    return _load_knowledge_base()
+
 
 class ContextBuilder:
     """
@@ -345,6 +393,7 @@ class ContextBuilder:
         """
         Build comprehensive context for AI from query.
         Returns a formatted string ready to prepend to Ollama prompt.
+        Includes: Knowledge Base + Project Context + DB Results
         """
         # Extract keywords
         keywords = self.extract_keywords(query)
@@ -367,8 +416,16 @@ class ContextBuilder:
                 if deps and not any(d.get('error') for d in deps):
                     dependents.extend(deps)
 
-        # Build context string
+        # Build context string - START WITH KNOWLEDGE BASE
         context_parts = []
+
+        # Add Knowledge Base first (always present)
+        knowledge_base = get_knowledge_base()
+        if knowledge_base:
+            context_parts.append(knowledge_base)
+            context_parts.append("")
+            context_parts.append("---")
+            context_parts.append("")
 
         context_parts.append("=== CONTEXTO DE LA BASE DE DATOS ===")
         context_parts.append(f"Proyectos cargados: {len(stats['projects'])}")
