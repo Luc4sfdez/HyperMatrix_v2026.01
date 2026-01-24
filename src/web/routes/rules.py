@@ -43,12 +43,14 @@ def load_rules() -> RulesConfig:
 
 
 @router.get("/", response_model=RulesConfig)
+@router.get("", response_model=RulesConfig, include_in_schema=False)
 async def get_rules():
     """Get current rules configuration."""
     return load_rules()
 
 
 @router.put("/", response_model=RulesConfig)
+@router.put("", response_model=RulesConfig, include_in_schema=False)
 async def update_rules(config: RulesConfig):
     """Update rules configuration."""
     global rules_config
