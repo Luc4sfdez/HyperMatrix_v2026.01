@@ -17,12 +17,12 @@ from pathlib import Path
 DATA_DIR = os.getenv("DATA_DIR", "/app/data")
 DB_PATH = os.path.join(DATA_DIR, "hypermatrix.db")
 
-# Knowledge Base paths (check multiple locations)
-# In Docker: /app/data/knowledge/ or /app/config/knowledge/
-# Locally: config/knowledge/
+# Knowledge Base paths (check config first, then data as fallback)
+# Priority: /app/config/knowledge/ (built into image) > /app/data/knowledge/ (volume)
 KB_PATHS = [
-    os.path.join(DATA_DIR, "knowledge", "hypermatrix_kb.md"),  # Docker data dir
+    "/app/config/knowledge/hypermatrix_kb.md",  # Docker config dir (priority)
     os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "config", "knowledge", "hypermatrix_kb.md"),  # Project config dir
+    os.path.join(DATA_DIR, "knowledge", "hypermatrix_kb.md"),  # Docker data dir (fallback)
 ]
 
 # Cached Knowledge Base (loaded once at module import)
