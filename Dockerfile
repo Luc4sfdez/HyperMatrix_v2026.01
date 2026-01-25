@@ -90,4 +90,4 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
 ENTRYPOINT ["/app/entrypoint.sh"]
 
 # Default command
-CMD ["python", "-c", "import uvicorn; uvicorn.run('src.web.app:app', host='0.0.0.0', port=26020)"]
+CMD ["python", "-c", "import uvicorn; uvicorn.run('src.web.app:app', host='0.0.0.0', port=26020, timeout_keep_alive=300)"]

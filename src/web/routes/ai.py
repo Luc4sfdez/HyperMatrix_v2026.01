@@ -27,7 +27,7 @@ router = APIRouter()
 
 # Ollama configuration
 OLLAMA_HOST = os.getenv("OLLAMA_HOST", "localhost:11434")
-OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen2:7b")
+OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "openhermes:latest")
 OLLAMA_BASE_URL = f"http://{OLLAMA_HOST}"
 
 
@@ -78,7 +78,7 @@ async def generate_completion(
         payload["system"] = system
 
     try:
-        async with httpx.AsyncClient(timeout=httpx.Timeout(120.0, read=120.0)) as client:
+        async with httpx.AsyncClient(timeout=httpx.Timeout(300.0, read=300.0)) as client:
             response = await client.post(
                 f"{OLLAMA_BASE_URL}/api/generate",
                 json=payload
@@ -339,8 +339,14 @@ async def chat_about_code(
     command_result = await process_special_command(message)
 
     # Build rich context from SQLite + ChromaDB
+    # Skip heavy context for general/greeting messages
     db_context = ""
-    if use_context_builder and not command_result:
+    general_patterns = ['hola', 'hello', 'hi', 'hey', 'buenos', 'buenas', 'saludos',
+                        'que tal', 'como estas', 'ayuda', 'help', 'que puedes',
+                        'que sabes', 'quien eres', 'presentate']
+    is_general_query = any(p in message.lower() for p in general_patterns)
+
+    if use_context_builder and not command_result and not is_general_query:
         try:
             # Try to get project_id from scan_id if not provided
             effective_project_id = project_id
@@ -409,8 +415,8 @@ Basándote en la información anterior, responde al usuario."""
 
 {prompt}"""
 
-    # Auto-add project context for better awareness
-    if not command_result and scan_id:
+    # Auto-add project context for better awareness (skip for general queries)
+    if not command_result and scan_id and not is_general_query:
         try:
             project_ctx = await get_project_context(scan_id=scan_id)
             if project_ctx.get("has_project"):

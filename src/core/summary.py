@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 
 # Ollama configuration
 OLLAMA_HOST = os.getenv("OLLAMA_HOST", "localhost:11434")
-OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen2:7b")
+OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "openhermes:latest")
 OLLAMA_BASE_URL = f"http://{OLLAMA_HOST}"
 
 SUMMARY_PROMPT = """Analyze this software project and generate a concise summary in Spanish.
