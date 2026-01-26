@@ -1,6 +1,8 @@
 """
-HyperMatrix v2026.01 - AI Routes (Ollama Integration)
-Endpoints for AI-powered code analysis using local LLMs.
+HyperMatrix v2026.01 - AI Routes (Multi-Provider Support)
+Endpoints for AI-powered code analysis using local or cloud LLMs.
+Supports: Ollama (local), OpenAI, Anthropic, Groq
+
 With full database and file access for intelligent assistance.
 """
 
@@ -24,15 +26,49 @@ from ..app import active_scans, scan_results
 from ...core.context_builder import build_ai_context, get_context_builder
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
-# Ollama configuration
+# =============================================================================
+# AI Provider Configuration
+# =============================================================================
+AI_PROVIDER = os.getenv("AI_PROVIDER", "ollama").lower()  # ollama | openai | anthropic | groq
+
+# Ollama (local)
 OLLAMA_HOST = os.getenv("OLLAMA_HOST", "localhost:11434")
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "openhermes:latest")
 OLLAMA_BASE_URL = f"http://{OLLAMA_HOST}"
 
+# OpenAI
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
+OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
+OPENAI_BASE_URL = "https://api.openai.com/v1"
+
+# Anthropic
+ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
+ANTHROPIC_MODEL = os.getenv("ANTHROPIC_MODEL", "claude-3-haiku-20240307")
+ANTHROPIC_BASE_URL = "https://api.anthropic.com/v1"
+
+# Groq (very fast)
+GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
+GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.1-8b-instant")
+GROQ_BASE_URL = "https://api.groq.com/openai/v1"
+
+
+def get_default_model() -> str:
+    """Get default model based on provider."""
+    if AI_PROVIDER == "openai":
+        return OPENAI_MODEL
+    elif AI_PROVIDER == "anthropic":
+        return ANTHROPIC_MODEL
+    elif AI_PROVIDER == "groq":
+        return GROQ_MODEL
+    return OLLAMA_MODEL
+
 
 async def check_ollama_available() -> bool:
     """Check if Ollama server is available."""
+    if AI_PROVIDER != "ollama":
+        return False
     try:
         async with httpx.AsyncClient(timeout=5.0) as client:
             response = await client.get(f"{OLLAMA_BASE_URL}/api/tags")
@@ -41,17 +77,142 @@ async def check_ollama_available() -> bool:
         return False
 
 
+async def check_ai_available() -> Dict[str, Any]:
+    """Check if current AI provider is available."""
+    if AI_PROVIDER == "ollama":
+        available = await check_ollama_available()
+        return {"available": available, "provider": "ollama", "model": OLLAMA_MODEL}
+    elif AI_PROVIDER == "openai":
+        return {"available": bool(OPENAI_API_KEY), "provider": "openai", "model": OPENAI_MODEL}
+    elif AI_PROVIDER == "anthropic":
+        return {"available": bool(ANTHROPIC_API_KEY), "provider": "anthropic", "model": ANTHROPIC_MODEL}
+    elif AI_PROVIDER == "groq":
+        return {"available": bool(GROQ_API_KEY), "provider": "groq", "model": GROQ_MODEL}
+    return {"available": False, "provider": AI_PROVIDER, "error": "Unknown provider"}
+
+
 async def get_available_models() -> List[str]:
-    """Get list of available models from Ollama."""
-    try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            response = await client.get(f"{OLLAMA_BASE_URL}/api/tags")
-            if response.status_code == 200:
-                data = response.json()
-                return [model["name"] for model in data.get("models", [])]
-    except Exception:
-        pass
+    """Get list of available models based on provider."""
+    if AI_PROVIDER == "ollama":
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                response = await client.get(f"{OLLAMA_BASE_URL}/api/tags")
+                if response.status_code == 200:
+                    data = response.json()
+                    return [model["name"] for model in data.get("models", [])]
+        except Exception:
+            pass
+        return []
+    elif AI_PROVIDER == "openai":
+        return ["gpt-4o", "gpt-4o-mini", "gpt-4-turbo", "gpt-3.5-turbo"]
+    elif AI_PROVIDER == "anthropic":
+        return ["claude-3-opus-20240229", "claude-3-sonnet-20240229", "claude-3-haiku-20240307"]
+    elif AI_PROVIDER == "groq":
+        return ["llama-3.1-70b-versatile", "llama-3.1-8b-instant", "mixtral-8x7b-32768", "gemma2-9b-it"]
     return []
+
+
+async def generate_completion_ollama(
+    prompt: str,
+    model: str,
+    system: Optional[str],
+    temperature: float,
+    max_tokens: int,
+) -> str:
+    """Generate completion using Ollama (local)."""
+    payload = {
+        "model": model,
+        "prompt": prompt,
+        "stream": False,
+        "options": {"temperature": temperature, "num_predict": max_tokens}
+    }
+    if system:
+        payload["system"] = system
+
+    async with httpx.AsyncClient(timeout=httpx.Timeout(300.0, read=300.0)) as client:
+        response = await client.post(f"{OLLAMA_BASE_URL}/api/generate", json=payload)
+        if response.status_code == 200:
+            return response.json().get("response", "")
+        raise HTTPException(status_code=response.status_code, detail=f"Ollama error: {response.text}")
+
+
+async def generate_completion_openai(
+    prompt: str,
+    model: str,
+    system: Optional[str],
+    temperature: float,
+    max_tokens: int,
+) -> str:
+    """Generate completion using OpenAI API."""
+    messages = []
+    if system:
+        messages.append({"role": "system", "content": system})
+    messages.append({"role": "user", "content": prompt})
+
+    async with httpx.AsyncClient(timeout=60.0) as client:
+        response = await client.post(
+            f"{OPENAI_BASE_URL}/chat/completions",
+            headers={"Authorization": f"Bearer {OPENAI_API_KEY}", "Content-Type": "application/json"},
+            json={"model": model, "messages": messages, "temperature": temperature, "max_tokens": max_tokens}
+        )
+        if response.status_code == 200:
+            return response.json()["choices"][0]["message"]["content"]
+        raise HTTPException(status_code=response.status_code, detail=f"OpenAI error: {response.text}")
+
+
+async def generate_completion_anthropic(
+    prompt: str,
+    model: str,
+    system: Optional[str],
+    temperature: float,
+    max_tokens: int,
+) -> str:
+    """Generate completion using Anthropic API."""
+    payload = {
+        "model": model,
+        "max_tokens": max_tokens,
+        "messages": [{"role": "user", "content": prompt}]
+    }
+    if system:
+        payload["system"] = system
+
+    async with httpx.AsyncClient(timeout=60.0) as client:
+        response = await client.post(
+            f"{ANTHROPIC_BASE_URL}/messages",
+            headers={
+                "x-api-key": ANTHROPIC_API_KEY,
+                "anthropic-version": "2023-06-01",
+                "Content-Type": "application/json"
+            },
+            json=payload
+        )
+        if response.status_code == 200:
+            return response.json()["content"][0]["text"]
+        raise HTTPException(status_code=response.status_code, detail=f"Anthropic error: {response.text}")
+
+
+async def generate_completion_groq(
+    prompt: str,
+    model: str,
+    system: Optional[str],
+    temperature: float,
+    max_tokens: int,
+) -> str:
+    """Generate completion using Groq API (OpenAI-compatible)."""
+    messages = []
+    if system:
+        messages.append({"role": "system", "content": system})
+    messages.append({"role": "user", "content": prompt})
+
+    async with httpx.AsyncClient(timeout=60.0) as client:
+        response = await client.post(
+            f"{GROQ_BASE_URL}/chat/completions",
+            headers={"Authorization": f"Bearer {GROQ_API_KEY}", "Content-Type": "application/json"},
+            json={"model": model, "messages": messages, "temperature": temperature, "max_tokens": max_tokens}
+        )
+        if response.status_code == 200:
+            return response.json()["choices"][0]["message"]["content"]
+        raise HTTPException(status_code=response.status_code, detail=f"Groq error: {response.text}")
 
 
 async def generate_completion(
@@ -61,40 +222,22 @@ async def generate_completion(
     temperature: float = 0.7,
     max_tokens: int = 2048,
 ) -> str:
-    """Generate a completion using Ollama."""
-    model = model or OLLAMA_MODEL
-
-    payload = {
-        "model": model,
-        "prompt": prompt,
-        "stream": False,
-        "options": {
-            "temperature": temperature,
-            "num_predict": max_tokens,
-        }
-    }
-
-    if system:
-        payload["system"] = system
+    """Generate a completion using configured AI provider."""
+    model = model or get_default_model()
 
     try:
-        async with httpx.AsyncClient(timeout=httpx.Timeout(300.0, read=300.0)) as client:
-            response = await client.post(
-                f"{OLLAMA_BASE_URL}/api/generate",
-                json=payload
-            )
-            if response.status_code == 200:
-                data = response.json()
-                return data.get("response", "")
-            else:
-                raise HTTPException(
-                    status_code=response.status_code,
-                    detail=f"Ollama error: {response.text}"
-                )
+        if AI_PROVIDER == "openai":
+            return await generate_completion_openai(prompt, model, system, temperature, max_tokens)
+        elif AI_PROVIDER == "anthropic":
+            return await generate_completion_anthropic(prompt, model, system, temperature, max_tokens)
+        elif AI_PROVIDER == "groq":
+            return await generate_completion_groq(prompt, model, system, temperature, max_tokens)
+        else:  # ollama (default)
+            return await generate_completion_ollama(prompt, model, system, temperature, max_tokens)
     except httpx.TimeoutException:
-        raise HTTPException(status_code=504, detail="Ollama request timeout")
+        raise HTTPException(status_code=504, detail=f"{AI_PROVIDER} request timeout")
     except httpx.ConnectError:
-        raise HTTPException(status_code=503, detail="Cannot connect to Ollama")
+        raise HTTPException(status_code=503, detail=f"Cannot connect to {AI_PROVIDER}")
 
 
 # =============================================================================
@@ -104,26 +247,126 @@ async def generate_completion(
 @router.get("/status")
 async def ai_status():
     """Check AI service status and available models."""
-    available = await check_ollama_available()
-    models = await get_available_models() if available else []
+    status = await check_ai_available()
+    models = await get_available_models() if status["available"] else []
+    default_model = get_default_model()
 
-    return {
-        "available": available,
-        "ollama_host": OLLAMA_HOST,
-        "default_model": OLLAMA_MODEL,
+    result = {
+        "available": status["available"],
+        "provider": AI_PROVIDER,
+        "default_model": default_model,
         "models": models,
-        "model_loaded": OLLAMA_MODEL in models,
+        "model_loaded": default_model in models if AI_PROVIDER == "ollama" else status["available"],
     }
+
+    # Add provider-specific info
+    if AI_PROVIDER == "ollama":
+        result["ollama_host"] = OLLAMA_HOST
+    else:
+        result["api_configured"] = status["available"]
+
+    return result
 
 
 @router.get("/models")
 async def list_models():
-    """List all available Ollama models."""
-    if not await check_ollama_available():
-        raise HTTPException(status_code=503, detail="Ollama not available")
+    """List all available models for current provider."""
+    status = await check_ai_available()
+    if not status["available"]:
+        raise HTTPException(status_code=503, detail=f"{AI_PROVIDER} not available")
 
     models = await get_available_models()
-    return {"models": models, "default": OLLAMA_MODEL}
+    return {"models": models, "default": get_default_model(), "provider": AI_PROVIDER}
+
+
+@router.get("/help")
+async def ai_help():
+    """
+    Get AI assistant help - commands, APIs, personalities.
+    This endpoint works WITHOUT AI being loaded.
+    """
+    return {
+        "assistant": {
+            "name": "Elena",
+            "description": "Asistente experta en analisis de codigo de HyperMatrix",
+            "personalities": [
+                {"id": "elena", "name": "Elena", "icon": "👩‍💻", "description": "Asistente amigable y profesional"},
+                {"id": "code_reviewer", "name": "Code Reviewer", "icon": "🔍", "description": "Revisor de codigo estricto"},
+                {"id": "architect", "name": "Architect", "icon": "🏗️", "description": "Arquitecto de software"},
+                {"id": "debugger", "name": "Debugger", "icon": "🐛", "description": "Especialista en depuracion"},
+            ]
+        },
+        "commands": {
+            "description": "Comandos especiales disponibles en el chat",
+            "list": [
+                {"command": "/proyecto", "description": "Resumen del proyecto actual"},
+                {"command": "/archivos <patron>", "description": "Buscar archivos (ej: /archivos config.py)"},
+                {"command": "/hermanos", "description": "Archivos con mismo nombre en distintas carpetas"},
+                {"command": "/duplicados", "description": "Archivos duplicados (mismo hash)"},
+                {"command": "/funciones <nombre>", "description": "Buscar funciones por nombre"},
+                {"command": "/clases <nombre>", "description": "Buscar clases por nombre"},
+                {"command": "/imports <archivo>", "description": "Ver imports de un archivo"},
+                {"command": "/impacto <archivo>", "description": "Analizar impacto de eliminar archivo"},
+                {"command": "/leer <ruta>", "description": "Leer contenido de un archivo"},
+                {"command": "/comparar <ruta1> <ruta2>", "description": "Comparar dos archivos"},
+                {"command": "/stats", "description": "Estadisticas del proyecto"},
+                {"command": "/help", "description": "Mostrar esta ayuda"},
+            ]
+        },
+        "tabs": {
+            "description": "Pestanas disponibles en HyperMatrix",
+            "list": [
+                {"id": 1, "name": "Dashboard", "description": "Iniciar analisis, ver proyectos"},
+                {"id": 2, "name": "Resultados", "description": "Ver archivos analizados, duplicados, hermanos"},
+                {"id": 3, "name": "Analisis Avanzado", "description": "Busqueda en lenguaje natural"},
+                {"id": 4, "name": "Explorador BD", "description": "Buscar funciones, clases, variables"},
+                {"id": 5, "name": "Codigo Muerto", "description": "Detectar codigo no usado"},
+                {"id": 6, "name": "Comparador", "description": "Comparar 2 archivos lado a lado"},
+                {"id": 7, "name": "Merge Wizard", "description": "Fusionar versiones de archivos"},
+                {"id": 8, "name": "Acciones Lote", "description": "Operaciones masivas"},
+                {"id": 9, "name": "Comparar Proyectos", "description": "Comparar 2 proyectos"},
+                {"id": 10, "name": "Refactoring", "description": "Sugerencias de mejora"},
+                {"id": 11, "name": "Grafo Linaje", "description": "Ver dependencias visuales"},
+                {"id": 12, "name": "Analisis Impacto", "description": "Que se rompe si elimino X"},
+                {"id": 13, "name": "Webhooks", "description": "Notificaciones externas"},
+                {"id": 14, "name": "Dashboard ML", "description": "Metricas de embeddings"},
+                {"id": 15, "name": "Contexto", "description": "Subir documentacion adicional"},
+                {"id": 16, "name": "Reglas", "description": "Configurar reglas de analisis"},
+                {"id": 17, "name": "Gestion", "description": "Eliminar workspace/analisis"},
+                {"id": 18, "name": "Configuracion", "description": "Ajustes generales"},
+            ]
+        },
+        "api_endpoints": {
+            "ai": [
+                {"method": "GET", "path": "/api/ai/status", "description": "Estado del proveedor de IA"},
+                {"method": "GET", "path": "/api/ai/models", "description": "Modelos disponibles"},
+                {"method": "GET", "path": "/api/ai/help", "description": "Esta ayuda"},
+                {"method": "POST", "path": "/api/ai/chat", "description": "Chat con Elena"},
+                {"method": "POST", "path": "/api/ai/explain-code", "description": "Explicar codigo"},
+                {"method": "POST", "path": "/api/ai/find-issues", "description": "Encontrar problemas"},
+            ],
+            "scan": [
+                {"method": "POST", "path": "/api/scan/start", "description": "Iniciar escaneo"},
+                {"method": "GET", "path": "/api/scan/list", "description": "Listar escaneos"},
+                {"method": "GET", "path": "/api/scan/status/{id}", "description": "Estado de escaneo"},
+            ],
+            "db": [
+                {"method": "GET", "path": "/api/db/stats", "description": "Estadisticas de BD"},
+                {"method": "GET", "path": "/api/db/search", "description": "Buscar en BD"},
+                {"method": "GET", "path": "/api/db/files", "description": "Listar archivos"},
+            ]
+        },
+        "current_provider": {
+            "name": AI_PROVIDER,
+            "model": get_default_model(),
+        },
+        "troubleshooting": [
+            {"problem": "Error 504 Timeout", "solution": "El modelo tarda mucho. Usa preguntas especificas o cambia a GPU/API cloud"},
+            {"problem": "Ollama no responde", "solution": "Verificar que el contenedor hypermatrix-ollama esta corriendo"},
+            {"problem": "No veo funciones", "solution": "Re-escanear el proyecto para indexar archivos"},
+            {"problem": "ChromaDB vacio", "solution": "El escaneo no incluyo embeddings. Re-escanear"},
+        ]
+    }
 
 
 # =============================================================================
