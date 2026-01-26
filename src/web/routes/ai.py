@@ -603,28 +603,34 @@ async def chat_about_code(
         except Exception as e:
             db_context = f"[Error building context: {str(e)}]\n"
 
-    # Use custom system prompt if provided, otherwise use enhanced default
+    # Use custom system prompt if provided, otherwise use Elena personality
     if not system_prompt:
-        system_prompt = """Eres un asistente experto en programación y análisis de código para HyperMatrix.
-TIENES ACCESO COMPLETO a la base de datos SQLite y ChromaDB del proyecto.
+        system_prompt = """Eres Elena, la asistente virtual de HyperMatrix.
 
-CAPACIDADES:
-- Ver TODAS las funciones con su archivo y línea exacta
-- Ver TODAS las clases con su herencia y ubicación
-- Ver TODOS los imports y dependencias entre archivos
-- Búsqueda semántica de código similar
+TU PERSONALIDAD:
+- Eres amigable, profesional y resolutiva
+- Saludas cordialmente cuando el usuario dice "hola"
+- Usas un tono cercano pero técnicamente preciso
+- Celebras los logros del usuario y le animas cuando hay problemas
+- NUNCA eres grosera ni sarcástica
+
+TU ROL:
+- Asistente experta en análisis de código para HyperMatrix
+- Tienes acceso a la base de datos SQLite y ChromaDB del proyecto
+- Puedes ver funciones, clases, imports y dependencias
 
 CÓMO RESPONDER:
-- Si preguntan "¿dónde está la función X?": Da el archivo y línea EXACTA
-- Si preguntan "¿qué se rompe si borro X?": Lista los archivos que dependen de X
-- Si preguntan "¿qué hace X?": Explica basándote en el código real
+- Si preguntan "¿dónde está X?": Da archivo y línea EXACTA
+- Si preguntan "¿qué se rompe si borro X?": Lista archivos dependientes
+- Si no encuentras algo: Sugiere amablemente usar comandos como /funciones o /archivos
+- Responde en español, de forma clara y concisa
 
-Responde de forma clara y concisa en español.
-SIEMPRE incluye rutas de archivo y números de línea cuando sea relevante.
-
-Comandos especiales disponibles:
-- /leer <ruta> para ver el contenido de un archivo
-- /comparar <ruta1> <ruta2> para comparar dos archivos"""
+COMANDOS DISPONIBLES:
+- /proyecto - Resumen del proyecto
+- /archivos <patron> - Buscar archivos
+- /funciones <nombre> - Buscar funciones
+- /leer <ruta> - Ver contenido de archivo
+- /help - Ver todos los comandos"""
 
     # Build conversation context
     conversation = ""
@@ -953,16 +959,39 @@ async def get_file_content_context(
     """
     Read content of a specific file.
     Allows the AI to see actual file contents for analysis.
+    Supports: absolute paths, relative paths, and filename search.
     """
     try:
         file_path = Path(path)
 
-        # Security: Only allow reading from known project directories
-        # Check if path is within allowed directories
-        allowed_prefixes = ["/projects", "/app", "E:", "C:"]
+        # Security: allowed directories
+        allowed_prefixes = ["/projects", "/app", "E:", "C:", "D:", "\\projects", "\\app"]
         path_str = str(file_path)
-        if not any(path_str.startswith(prefix) for prefix in allowed_prefixes):
-            raise HTTPException(status_code=403, detail="Acceso denegado a esta ruta")
+
+        # Check if it's an absolute path within allowed directories
+        is_allowed = any(path_str.upper().startswith(p.upper()) for p in allowed_prefixes)
+
+        # If not absolute/allowed, try to find the file by name
+        if not file_path.is_absolute() or not is_allowed:
+            import glob as glob_module
+            # Search in /projects directory
+            search_patterns = [
+                f"/projects/**/{path}",
+                f"/projects/**/*{path}*",
+                f"/projects/**/{path}.*",
+            ]
+            found_files = []
+            for pattern in search_patterns:
+                matches = glob_module.glob(pattern, recursive=True)
+                # Filter only files, not directories
+                found_files.extend([f for f in matches if Path(f).is_file()])
+                if found_files:
+                    break
+
+            if found_files:
+                file_path = Path(found_files[0])
+            else:
+                return {"error": f"Archivo no encontrado: '{path}'. Usa ruta completa (ej: E:/proyecto/archivo.py) o nombre exacto."}
 
         if not file_path.exists():
             return {"error": f"Archivo no encontrado: {path}"}
