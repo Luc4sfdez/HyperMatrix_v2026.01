@@ -136,7 +136,7 @@ class ContextBuilder:
 
         return unique_keywords[:10]  # Limit to 10 keywords
 
-    def search_sqlite(self, keywords: List[str], limit: int = 20) -> Dict[str, Any]:
+    def search_sqlite(self, keywords: List[str], limit: int = 5) -> Dict[str, Any]:
         """
         Search SQLite for functions, classes, variables, imports matching keywords.
         """
@@ -389,11 +389,57 @@ class ContextBuilder:
 
         return stats
 
+    def _detect_component_query(self, query: str) -> Optional[str]:
+        """
+        Detect if query is about a specific component/parser.
+        Returns the component name if found, None otherwise.
+        """
+        query_lower = query.lower()
+
+        # Patterns that suggest a component query
+        component_triggers = [
+            'parser', 'versiones', 'versions', 'componente', 'component',
+            'ef_', 'ef0', 'diferencias', 'differences', 'gen1', 'gen2',
+            'estructura', 'structure', 'analizar', 'analyze'
+        ]
+
+        if not any(trigger in query_lower for trigger in component_triggers):
+            return None
+
+        # Extract component name patterns
+        import re
+        patterns = [
+            r'\bef[_]?(\d{4})\b',         # ef_0520, ef0520
+            r'\bef[_]?(\d{3})\b',         # ef_052, ef052
+            r'parser\s+(\w+)',            # parser identification
+            r'componente\s+(\w+)',        # componente ef_0520
+            r'component\s+(\w+)',         # component ef_0520
+        ]
+
+        for pattern in patterns:
+            match = re.search(pattern, query_lower)
+            if match:
+                component = match.group(0) if 'ef' in match.group(0) else match.group(1)
+                # Normalize ef patterns
+                if component.startswith('ef') and not '_' in component:
+                    component = 'ef_' + component[2:]
+                return component
+
+        return None
+
+    def _get_deep_analysis(self, component_name: str) -> str:
+        """Get deep analysis of a component using DeepAnalyzer."""
+        try:
+            from .deep_analyzer import analyze_component
+            return analyze_component(component_name)
+        except Exception as e:
+            return f"[Error en análisis profundo: {str(e)}]"
+
     def build_context(self, query: str) -> str:
         """
         Build comprehensive context for AI from query.
         Returns a formatted string ready to prepend to Ollama prompt.
-        Includes: Knowledge Base + Project Context + DB Results
+        Includes: Knowledge Base + Project Context + DB Results + Deep Analysis (if applicable)
         """
         # Extract keywords
         keywords = self.extract_keywords(query)
@@ -406,6 +452,12 @@ class ContextBuilder:
 
         # Search ChromaDB
         chromadb_results = self.search_chromadb(query)
+
+        # Check for component/parser queries and get deep analysis
+        component_name = self._detect_component_query(query)
+        deep_analysis = None
+        if component_name:
+            deep_analysis = self._get_deep_analysis(component_name)
 
         # Check for dependency questions
         dependents = []
@@ -435,20 +487,20 @@ class ContextBuilder:
         context_parts.append(f"Total imports: {stats['total_imports']}")
         context_parts.append("")
 
-        # Add found functions
+        # Add found functions (limit to 5 for fast response)
         if sqlite_results["functions"]:
             context_parts.append("FUNCIONES ENCONTRADAS:")
-            for fn in sqlite_results["functions"][:10]:
+            for fn in sqlite_results["functions"][:5]:
                 context_parts.append(
                     f"  - {fn['name']}({fn['params'] or ''}) en línea {fn['line']} de {fn['filename']}"
                 )
                 context_parts.append(f"    Ruta: {fn['file']}")
             context_parts.append("")
 
-        # Add found classes
+        # Add found classes (limit to 5 for fast response)
         if sqlite_results["classes"]:
             context_parts.append("CLASES ENCONTRADAS:")
-            for cls in sqlite_results["classes"][:10]:
+            for cls in sqlite_results["classes"][:5]:
                 bases = f"({cls['bases']})" if cls['bases'] else ""
                 context_parts.append(
                     f"  - class {cls['name']}{bases} en línea {cls['line']} de {cls['filename']}"
@@ -456,39 +508,39 @@ class ContextBuilder:
                 context_parts.append(f"    Ruta: {cls['file']}")
             context_parts.append("")
 
-        # Add found imports
+        # Add found imports (limit to 5)
         if sqlite_results["imports"]:
             context_parts.append("IMPORTS RELEVANTES:")
-            for imp in sqlite_results["imports"][:10]:
+            for imp in sqlite_results["imports"][:5]:
                 import_str = f"from {imp['module']} import {imp['name']}" if imp['name'] else f"import {imp['module']}"
                 context_parts.append(f"  - {import_str} (línea {imp['line']} en {imp['filename']})")
             context_parts.append("")
 
-        # Add found files
+        # Add found files (limit to 5)
         if sqlite_results["files"]:
             context_parts.append("ARCHIVOS RELEVANTES:")
-            for f in sqlite_results["files"][:10]:
+            for f in sqlite_results["files"][:5]:
                 context_parts.append(f"  - {f['filename']} ({f.get('language', 'unknown')})")
-                context_parts.append(f"    Ruta: {f['filepath']}")
             context_parts.append("")
 
-        # Add dependents if found
+        # Add dependents if found (limit to 5)
         if dependents:
-            context_parts.append("DEPENDENCIAS (archivos que usan estos elementos):")
-            for dep in dependents[:10]:
-                context_parts.append(f"  - {dep['filename']} importa {dep.get('imports', 'unknown')}")
-                context_parts.append(f"    Ruta: {dep['file']}")
+            context_parts.append("DEPENDENCIAS:")
+            for dep in dependents[:5]:
+                context_parts.append(f"  - {dep['filename']}")
             context_parts.append("")
 
-        # Add ChromaDB semantic results
+        # Add ChromaDB semantic results (limit to 3 for speed)
         if chromadb_results and not any(r.get('error') for r in chromadb_results):
-            context_parts.append("CONTENIDO RELACIONADO (búsqueda semántica):")
-            for r in chromadb_results[:5]:
-                context_parts.append(f"  Archivo: {r.get('file', 'unknown')} (relevancia: {r.get('relevance', 0)})")
-                if r.get('content'):
-                    # Show first 200 chars
-                    preview = r['content'][:200].replace('\n', ' ')
-                    context_parts.append(f"    Preview: {preview}...")
+            context_parts.append("CÓDIGO RELACIONADO:")
+            for r in chromadb_results[:3]:
+                context_parts.append(f"  - {r.get('file', 'unknown')}")
+            context_parts.append("")
+
+        # Add deep analysis if component was detected (this is the detailed analysis)
+        if deep_analysis:
+            context_parts.append("=== ANÁLISIS PROFUNDO DEL COMPONENTE ===")
+            context_parts.append(deep_analysis)
             context_parts.append("")
 
         context_parts.append("=== FIN CONTEXTO ===")
@@ -496,6 +548,8 @@ class ContextBuilder:
         context_parts.append("Usa esta información para responder la pregunta del usuario.")
         context_parts.append("Si el usuario pregunta 'dónde está X', indica archivo y línea exacta.")
         context_parts.append("Si pregunta 'qué se rompe si borro X', lista los archivos dependientes.")
+        if deep_analysis:
+            context_parts.append("Si el usuario pregunta sobre versiones o diferencias de un componente, usa la tabla de versiones del análisis profundo.")
         context_parts.append("")
 
         return "\n".join(context_parts)

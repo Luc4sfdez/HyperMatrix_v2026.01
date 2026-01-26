@@ -582,14 +582,21 @@ async def chat_about_code(
     command_result = await process_special_command(message)
 
     # Build rich context from SQLite + ChromaDB
-    # Skip heavy context for general/greeting messages
+    # Skip heavy context for general/greeting messages UNLESS they mention specific components
     db_context = ""
     general_patterns = ['hola', 'hello', 'hi', 'hey', 'buenos', 'buenas', 'saludos',
                         'que tal', 'como estas', 'ayuda', 'help', 'que puedes',
                         'que sabes', 'quien eres', 'presentate']
+    # Patterns that indicate a technical query (should use context even with greeting)
+    technical_patterns = ['parser', 'ef_', 'ef0', 'componente', 'versiones', 'gen1', 'gen2',
+                          'funcion', 'clase', 'archivo', 'codigo', 'analizar']
     is_general_query = any(p in message.lower() for p in general_patterns)
+    has_technical_content = any(p in message.lower() for p in technical_patterns)
 
-    if use_context_builder and not command_result and not is_general_query:
+    # Use context if: technical content OR (not general query)
+    should_use_context = has_technical_content or not is_general_query
+
+    if use_context_builder and not command_result and should_use_context:
         try:
             # Try to get project_id from scan_id if not provided
             effective_project_id = project_id
@@ -1188,6 +1195,7 @@ COMANDOS DISPONIBLES:
 - /duplicados - Ver grupos de archivos duplicados
 - /leer <ruta> - Leer contenido de un archivo
 - /comparar <ruta1> <ruta2> - Comparar dos archivos
+- /analizar <componente> - Análisis profundo de un componente/parser
 - /ayuda - Mostrar esta ayuda
 
 Ejemplos:
@@ -1195,8 +1203,48 @@ Ejemplos:
 - /hermanos config.py
 - /leer E:/proyecto/config.py
 - /comparar archivo1.py archivo2.py
+- /analizar ef_0520
 """
         }
+
+    elif command == '/analizar' or command == '/analyze':
+        # Deep analysis of a component across versions
+        if not args:
+            return {
+                "command": "analizar",
+                "error": "Especifica el nombre del componente",
+                "prompt_addition": """Error: Usa /analizar <nombre_componente>
+
+Ejemplos:
+- /analizar ef_0520
+- /analizar identification
+- /analizar parser_gen2
+
+Este comando analiza un componente en todas las versiones del proyecto,
+mostrando diferencias, estructura y comparativas."""
+            }
+
+        try:
+            from ...core.deep_analyzer import analyze_component
+            analysis_result = analyze_component(args)
+            return {
+                "command": "analizar",
+                "data": {"component": args},
+                "prompt_addition": f"""
+ANÁLISIS PROFUNDO DEL COMPONENTE: {args}
+
+{analysis_result}
+
+Usa esta información para responder preguntas sobre el componente,
+sus diferencias entre versiones, estructura y funcionalidades.
+"""
+            }
+        except Exception as e:
+            return {
+                "command": "analizar",
+                "error": str(e),
+                "prompt_addition": f"Error al analizar componente '{args}': {str(e)}"
+            }
 
     return None
 
